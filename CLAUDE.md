@@ -59,6 +59,12 @@ npm start
 
 Set `ANTHROPIC_API_KEY` in `backend/.env` (copy from `backend/.env.example`).
 
+## Language & Git conventions
+
+- **All code, comments, strings, and documentation must be in English.** Never introduce Polish text anywhere in the codebase.
+- **After every significant change, create a git commit and push to GitHub** (`git add`, `git commit`, `git push`). This allows the user to track history and revert. Do this automatically without being asked.
+- GitHub repo: https://github.com/piterk100/transcriptomic-agent (branch: `main`)
+
 ## Adding a new tool
 
 1. Implement the function in `backend/tools/single.py` or `backend/tools/cross.py`. Signature: `fn(datasets: list, **params) -> dict`. Return a dict with an `interpretation` string field.
