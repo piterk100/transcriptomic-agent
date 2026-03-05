@@ -28,12 +28,14 @@ def _mwu_cross(expr_a_vals: np.ndarray, expr_b_vals: np.ndarray):
     return U, p_vals
 
 
-def cross_dataset_de(datasets, groupA=None, groupB=None, topN=30, **_):
+def cross_dataset_de(datasets, groupA=None, groupB=None, topN=30, min_effect_size=0.5, **_):
     """
     Cross-dataset DE using Mann-Whitney U with:
     - per-dataset BH correction (controls within-dataset FDR)
     - Fisher's combined test across datasets for directionally consistent genes
     - global BH correction on Fisher's combined p-values
+    - effect size filter: genes with avg |logFC| < min_effect_size are excluded after
+      directional consistency check (reported in n_filtered_by_effect_size)
     """
     per_ds: dict[str, dict] = {}  # gene → {ds_name → {logFC, rbc, p, adj_p}}
     used = []
@@ -71,12 +73,19 @@ def cross_dataset_de(datasets, groupA=None, groupB=None, topN=30, **_):
 
     common = [g for g, dm in per_ds.items() if len(dm) == len(used)]
 
-    # Build candidates: directionally consistent across all datasets
+    # Build candidates: directionally consistent + minimum effect size across all datasets
+    n_directionally_inconsistent = 0
+    n_below_effect_size = 0
     fisher_genes, fisher_ps, entries = [], [], []
     for gene in common:
         dm = per_ds[gene]
         lfcs = [dm[d]["logFC"] for d in used]
         if not (all(x > 0 for x in lfcs) or all(x < 0 for x in lfcs)):
+            n_directionally_inconsistent += 1
+            continue
+        avg_abs_lfc = float(np.mean(np.abs(lfcs)))
+        if avg_abs_lfc < min_effect_size:
+            n_below_effect_size += 1
             continue
         # Fisher's combined p-value (meta-analysis of per-dataset raw p-values)
         ps_clipped = np.clip([dm[d]["p"] for d in used], 1e-300, 1.0)
@@ -87,7 +96,7 @@ def cross_dataset_de(datasets, groupA=None, groupB=None, topN=30, **_):
         entries.append({
             "gene": gene,
             "direction": "UP" if lfcs[0] > 0 else "DOWN",
-            "avg_abs_logFC": round(float(np.mean(np.abs(lfcs))), 3),
+            "avg_abs_logFC": round(avg_abs_lfc, 3),
             "fisher_p": fisher_p,
             "n_sig_datasets": sum(1 for d in used if dm[d]["adj_p"] < 0.05),
             "n_datasets": len(used),
@@ -113,6 +122,9 @@ def cross_dataset_de(datasets, groupA=None, groupB=None, topN=30, **_):
         "test": "Mann-Whitney U (per-dataset BH) + Fisher meta-analysis (global BH)",
         "n_consistent_genes": len(entries),
         "n_common_genes_tested": len(common),
+        "n_filtered_by_directionality": n_directionally_inconsistent,
+        "n_filtered_by_effect_size": n_below_effect_size,
+        "min_effect_size_used": min_effect_size,
         "top_consistent_up":   [x for x in entries if x["direction"] == "UP"][:topN],
         "top_consistent_down": [x for x in entries if x["direction"] == "DOWN"][:topN],
     }
@@ -182,6 +194,13 @@ def invariant_axis(datasets, groupA=None, groupB=None, topN=20, **_):
     if len(valid_ds) < 2:
         return {"error": f"Need ≥2 datasets with groups {groupA} and {groupB}"}
 
+    # Warn when any dataset has fewer than 5 samples in either group; reduce bootstrap N
+    # to avoid overconfident estimates from permuting tiny groups.
+    low_sample_warning = [
+        ds["name"] for ds, sA, sB in valid_ds if min(len(sA), len(sB)) < 5
+    ]
+    N_BOOT = 100 if low_sample_warning else 500
+
     gene_scores = []
     for gene in common:
         effects = []
@@ -208,7 +227,8 @@ def invariant_axis(datasets, groupA=None, groupB=None, topN=20, **_):
 
     # Bootstrap permutation test: for each top-5 gene, permute group labels N_BOOT times
     # to obtain an empirical null distribution of invariance scores.
-    N_BOOT = 500
+    # N_BOOT is set to 100 (instead of 500) when any dataset has low sample counts (<5 per group)
+    # to avoid overconfident p-values from tiny permutation spaces.
     rng = np.random.default_rng(42)
 
     for entry in gene_scores[:min(5, len(gene_scores))]:
@@ -256,6 +276,7 @@ def invariant_axis(datasets, groupA=None, groupB=None, topN=20, **_):
     return {
         "comparison": f"{groupA} vs {groupB}",
         "n_datasets": len(valid_ds),
+        "low_sample_warning": low_sample_warning,
         "axis_consistent_in": f"{n_sig}/{len(valid_ds)} datasets",
         "n_bootstrap_validated": f"{n_boot_sig}/5 top genes (p_boot<0.01, Bonferroni)",
         "top_invariant_genes": gene_scores[:topN],

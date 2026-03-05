@@ -5,6 +5,7 @@ from scipy.stats import rankdata as _rankdata, norm as _norm
 from statsmodels.stats.multitest import multipletests
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score as _silhouette_score
 
 PATHWAYS = {
     "Hallmark_Hypoxia":       ["VEGFA","SLC2A1","LDHA","ENO1","HK2","ALDOA","PGAM1","TPI1","PGK1","PFKL","GAPDH","PKM","BNIP3","BNIP3L","DDIT4","P4HA1","P4HA2","PLOD1","PLOD2","COL5A1"],
@@ -347,6 +348,12 @@ def subgroup_discovery(datasets, datasetName=None, group=None, **_):
     km = KMeans(n_clusters=2, random_state=42, n_init=10)
     labels = km.fit_predict(pca_coords)
 
+    # Silhouette score measures cluster cohesion/separation (-1 to 1; <0.2 = poorly separated)
+    try:
+        sil_score = round(float(_silhouette_score(pca_coords, labels)), 3)
+    except Exception:
+        sil_score = 0.0
+
     sub1 = [samples[i] for i, l in enumerate(labels) if l == 0]
     sub2 = [samples[i] for i, l in enumerate(labels) if l == 1]
 
@@ -379,17 +386,19 @@ def subgroup_discovery(datasets, datasetName=None, group=None, **_):
         "n_samples": len(samples),
         "subgroup_1": {"n": len(sub1), "samples": sub1},
         "subgroup_2": {"n": len(sub2), "samples": sub2},
+        "silhouette_score": sil_score,
         "n_significant_markers": len(sig_markers),
         "top_markers_sub1": [m for m in sig_markers if m["logFC"] > 0][:10],
         "top_markers_sub2": [m for m in sig_markers if m["logFC"] < 0][:10],
         "interpretation": (
             f"Detected 2 subgroups within '{group}' ({len(sub1)} vs {len(sub2)} samples, PCA+KMeans), "
             f"{len(sig_markers)} marker genes (MWU adj_p<0.05)"
+            + ("" if sil_score >= 0.2 else "; subgroups may not be well-separated (silhouette<0.2)")
         ),
     }
 
 
-def gene_network_hub(datasets, datasetName=None, topN=30, corrThreshold=0.6, **_):
+def gene_network_hub(datasets, datasetName=None, topN=30, corrThreshold=0.6, use_permutation_threshold=True, **_):
     ds = _get_ds(datasets, datasetName)
     expr: pd.DataFrame = ds["expr"]
 
@@ -405,21 +414,61 @@ def gene_network_hub(datasets, datasetName=None, topN=30, corrThreshold=0.6, **_
     abs_corr = np.abs(corr_mat)
     np.fill_diagonal(abs_corr, 0)
 
-    mask = abs_corr >= corrThreshold
-    connectivity = mask.sum(axis=1)
+    n_genes = len(top_genes)
+    triu_i, triu_j = np.triu_indices(n_genes, k=1)
+    obs_abs = abs_corr[triu_i, triu_j]
 
+    if use_permutation_threshold:
+        # Permutation test: shuffle sample labels 200 times, count how often the null
+        # |corr| >= observed |corr| for each gene pair, then FDR-correct across all pairs.
+        N_PERM = 200
+        rng_perm = np.random.default_rng(42)
+        n_samples = sub.shape[1]
+        exceed_count = np.zeros(len(triu_i), dtype=float)
+
+        for _ in range(N_PERM):
+            perm_idx = rng_perm.permutation(n_samples)
+            perm_corr = np.corrcoef(sub[:, perm_idx])
+            np.nan_to_num(perm_corr, nan=0.0, copy=False)
+            exceed_count += np.abs(perm_corr[triu_i, triu_j]) >= obs_abs
+
+        perm_ps = exceed_count / N_PERM
+        _, adj_perm_ps, _, _ = multipletests(perm_ps, method="fdr_bh")
+
+        # Map (i, j) → FDR-corrected permutation p-value for edge annotation
+        perm_p_lookup = {
+            (int(triu_i[k]), int(triu_j[k])): float(adj_perm_ps[k])
+            for k in range(len(triu_i))
+        }
+
+        # Build adjacency mask from significant edges (FDR < 0.05)
+        mask = np.zeros((n_genes, n_genes), dtype=bool)
+        for k in np.where(adj_perm_ps < 0.05)[0]:
+            i, j = int(triu_i[k]), int(triu_j[k])
+            mask[i, j] = True
+            mask[j, i] = True
+    else:
+        perm_p_lookup = {}
+        mask = abs_corr >= corrThreshold
+
+    connectivity = mask.sum(axis=1)
     top_idx = np.argsort(-connectivity)[:topN]
     top_hubs = [{"gene": top_genes[i], "degree": int(connectivity[i])} for i in top_idx]
 
     edge_idx = np.argwhere(mask)
     edge_idx = edge_idx[edge_idx[:, 0] < edge_idx[:, 1]]  # upper triangle
-    edges = [{"g1": top_genes[i], "g2": top_genes[j], "r": round(float(abs_corr[i, j]), 3)}
-             for i, j in edge_idx]
+    edges = []
+    for i, j in edge_idx:
+        edge = {"g1": top_genes[i], "g2": top_genes[j], "r": round(float(abs_corr[i, j]), 3)}
+        if perm_p_lookup:
+            edge["perm_p"] = round(perm_p_lookup.get((i, j), 1.0), 4)
+        edges.append(edge)
     edges.sort(key=lambda e: -e["r"])
 
     return {
         "dataset": ds["name"],
         "corr_threshold": corrThreshold,
+        "use_permutation_threshold": use_permutation_threshold,
         "n_edges": len(edges),
         "n_genes_tested": len(top_genes),
         "top_hubs": top_hubs,
