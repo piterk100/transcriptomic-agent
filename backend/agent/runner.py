@@ -1,0 +1,150 @@
+import json
+import re
+from typing import AsyncGenerator
+
+import anthropic
+
+from ..agent.system_prompt import build_system_prompt
+from ..agent.seeder import generate_seeds, extract_evidence_stats
+from ..tools.registry import TOOLS, CROSS_TOOL_NAMES, summarize_result
+from ..tools.sandbox import execute_sandbox
+
+
+async def run_agent_loop(
+    datasets: list,
+    max_steps: int,
+    api_key: str,
+) -> AsyncGenerator[dict, None]:
+    """
+    Async generator — yields log event dicts.
+    Konsumowany przez FastAPI StreamingResponse.
+    """
+    client = anthropic.AsyncAnthropic(api_key=api_key)
+
+    all_genes = [set(ds["expr"].index) for ds in datasets]
+    common_genes = all_genes[0].intersection(*all_genes[1:]) if len(all_genes) > 1 else all_genes[0] if all_genes else set()
+
+    # ── Pre-analysis seeding ──────────────────────────────────────────────────
+    seeds, seed_summary = generate_seeds(datasets)
+    system_prompt = build_system_prompt(datasets, len(common_genes), seed_summary=seed_summary)
+    messages = []
+    discoveries = []
+    hypotheses: list[dict] = list(seeds)   # pre-populated with S1, S2, ...
+    hypo_counter = 0                        # agent-proposed: H1, H2, ...
+
+    yield {"type": "seed", "text": f"Pre-analiza: {len(seeds)} hipotez zasianych", "summary": seed_summary}
+    for s in seeds:
+        yield {"type": "hypothesis_propose", "hypothesis": dict(s)}
+
+    for i in range(max_steps):
+        step_num = i + 1
+
+        discovery_summary = (
+            "Odkrycia:\n" + "\n".join(f"- [{d['action']}] {d['summary']}" for d in discoveries[-8:])
+            if discoveries else "Pierwszy krok."
+        )
+        hypo_summary = (
+            "\nHIPOTEZY:\n" + "\n".join(f"  [{h['id']}][{h['status'].upper()}] {h['text']}" for h in hypotheses)
+            if hypotheses else ""
+        )
+
+        messages.append({
+            "role": "user",
+            "content": f"Krok {step_num}/{max_steps}. {discovery_summary}{hypo_summary}\n\nCo zbadasz?",
+        })
+
+        yield {"type": "thinking", "text": f"Agent myśli... ({step_num}/{max_steps})"}
+
+        try:
+            response = await client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=1200,
+                system=system_prompt,
+                messages=messages,
+            )
+            raw = response.content[0].text if response.content else ""
+        except Exception as e:
+            yield {"type": "error", "text": f"API: {e}"}
+            return
+
+        m = re.search(r"\{[\s\S]*\}", raw)
+        try:
+            dec = json.loads(m.group(0) if m else raw)
+        except json.JSONDecodeError:
+            yield {"type": "error", "text": f"Parse: {raw[:200]}"}
+            messages.append({"role": "assistant", "content": raw})
+            continue
+
+        thought = dec.get("thought", "")
+        action = dec.get("action", "")
+        params = dec.get("params", {})
+        hypo_action = dec.get("hypothesis_action")
+
+        # Process propose BEFORE tool call
+        if isinstance(hypo_action, dict) and hypo_action.get("type") == "propose" and hypo_action.get("text"):
+            hypo_counter += 1
+            h = {
+                "id": f"H{hypo_counter}",
+                "text": hypo_action["text"],
+                "genes": hypo_action.get("genes", []),   # optional list of genes the hypothesis is about
+                "status": "pending",
+                "evidence": [],
+                "proposed_at": step_num,
+                "seeded_by": "llm",
+            }
+            hypotheses.append(h)
+            yield {"type": "hypothesis_propose", "hypothesis": dict(h)}
+
+        if action == "DONE":
+            yield {"type": "done", "text": thought}
+            return
+
+        yield {"type": "thought", "text": thought}
+
+        result = None
+        if action == "execute_code":
+            code = params.get("code", "")
+            yield {"type": "code", "code": code}
+            result = execute_sandbox(code, datasets)
+            summary = f"BŁĄD: {result['error']}" if isinstance(result, dict) and result.get("error") else f"Kod wykonany: {str(result)[:80]}"
+            discoveries.append({"action": action, "params": params, "summary": summary, "result": result})
+            yield {"type": "result", "action": action, "params": params, "result": result, "summary": summary, "isCross": False, "isDynamic": True}
+        elif action in TOOLS:
+            try:
+                result = TOOLS[action](datasets, **params)
+                summary = summarize_result(action, result)
+                discoveries.append({"action": action, "params": params, "summary": summary, "result": result})
+                yield {
+                    "type": "result", "action": action, "params": params, "result": result,
+                    "summary": summary, "isCross": action in CROSS_TOOL_NAMES, "isDynamic": False,
+                }
+            except Exception as e:
+                result = {"error": str(e)}
+                yield {"type": "error", "text": f"{action}: {e}"}
+        else:
+            result = {"error": f"Nieznane narzędzie: {action}"}
+            yield {"type": "error", "text": f"Nieznane narzędzie: {action}"}
+
+        # Process evaluate AFTER tool call
+        if isinstance(hypo_action, dict) and hypo_action.get("type") == "evaluate" and hypo_action.get("hypothesis_id"):
+            h = next((x for x in hypotheses if x["id"] == hypo_action["hypothesis_id"]), None)
+            if h:
+                verdict = hypo_action.get("verdict", "uncertain")
+                if verdict not in ("confirmed", "rejected", "uncertain"):
+                    verdict = "uncertain"
+                h["status"] = verdict
+                h["evidence"].append({
+                    "step": step_num,
+                    "action": action,
+                    "reasoning": hypo_action.get("reasoning", ""),
+                    "key_stats": extract_evidence_stats(action, result or {}, h.get("genes", [])),
+                })
+                yield {
+                    "type": "hypothesis_eval",
+                    "hypothesis": dict(h),
+                    "reasoning": hypo_action.get("reasoning", ""),
+                }
+
+        messages.append({"role": "assistant", "content": raw})
+        result_str = json.dumps(result, default=str)[:2500] if result is not None else "null"
+        messages.append({"role": "user", "content": f"Wynik {action}:\n{result_str}"})
