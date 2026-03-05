@@ -67,7 +67,7 @@ def cross_dataset_de(datasets, groupA=None, groupB=None, topN=30, **_):
             }
 
     if not used:
-        return {"error": f"Brak datasetów z grupami {groupA}, {groupB}"}
+        return {"error": f"No datasets found with groups {groupA}, {groupB}"}
 
     common = [g for g, dm in per_ds.items() if len(dm) == len(used)]
 
@@ -125,14 +125,14 @@ def cross_dataset_correlation(datasets, genes=None, **_):
         expr = ds["expr"]
         avail = [g for g in genes if g in expr.index]
         if len(avail) < 2:
-            per.append({"dataset": ds["name"], "error": "Za mało genów"})
+            per.append({"dataset": ds["name"], "error": "Too few genes"})
             continue
         sub = expr.loc[avail]
         # Filter constant genes — corrcoef returns NaN for zero-variance rows
         variable = sub.var(axis=1) > 0
         sub = sub[variable].values
         if sub.shape[0] < 2:
-            per.append({"dataset": ds["name"], "error": "Za mało zmiennych genów"})
+            per.append({"dataset": ds["name"], "error": "Too few variable genes"})
             continue
         # Spearman rank-based correlation — robust to non-normality
         ranks = np.apply_along_axis(lambda x: _rankdata(x, method="average"), 1, sub)
@@ -141,7 +141,7 @@ def cross_dataset_correlation(datasets, genes=None, **_):
         upper = np.abs(corr_mat[np.triu_indices(n, k=1)])
         upper = upper[~np.isnan(upper)]
         if len(upper) == 0:
-            per.append({"dataset": ds["name"], "error": "Brak par genów do korelacji"})
+            per.append({"dataset": ds["name"], "error": "No gene pairs available for correlation"})
             continue
         per.append({
             "dataset": ds["name"],
@@ -157,9 +157,9 @@ def cross_dataset_correlation(datasets, genes=None, **_):
         "per_dataset": per,
         "mean_replication": round(mean_c, 3),
         "min_replication": round(min_c, 3),
-        "interpretation": "Moduł silnie replikuje się" if min_c > 0.5
-            else "Moduł częściowo replikuje się" if min_c > 0.3
-            else "Moduł nie replikuje się — możliwy artefakt",
+        "interpretation": "Module replicates strongly across datasets" if min_c > 0.5
+            else "Module partially replicates" if min_c > 0.3
+            else "Module does not replicate — possible artifact",
     }
 
 
@@ -167,7 +167,7 @@ def invariant_axis(datasets, groupA=None, groupB=None, topN=20, **_):
     all_genes = [set(ds["expr"].index) for ds in datasets]
     common = list(all_genes[0].intersection(*all_genes[1:])) if len(all_genes) > 1 else list(all_genes[0]) if all_genes else []
     if not common:
-        return {"error": "Brak wspólnych genów"}
+        return {"error": "No common genes across datasets"}
 
     valid_ds = []
     for ds in datasets:
@@ -180,7 +180,7 @@ def invariant_axis(datasets, groupA=None, groupB=None, topN=20, **_):
             valid_ds.append((ds, sA, sB))
 
     if len(valid_ds) < 2:
-        return {"error": f"Potrzeba ≥2 datasetów z grupami {groupA} i {groupB}"}
+        return {"error": f"Need ≥2 datasets with groups {groupA} and {groupB}"}
 
     gene_scores = []
     for gene in common:
@@ -256,17 +256,17 @@ def invariant_axis(datasets, groupA=None, groupB=None, topN=20, **_):
     return {
         "comparison": f"{groupA} vs {groupB}",
         "n_datasets": len(valid_ds),
-        "axis_consistent_in": f"{n_sig}/{len(valid_ds)} datasetach",
-        "n_bootstrap_validated": f"{n_boot_sig}/5 top genów (p_boot<0.01, Bonferroni)",
+        "axis_consistent_in": f"{n_sig}/{len(valid_ds)} datasets",
+        "n_bootstrap_validated": f"{n_boot_sig}/5 top genes (p_boot<0.01, Bonferroni)",
         "top_invariant_genes": gene_scores[:topN],
         "axis_per_dataset": axis_per_ds,
         "interpretation": (
-            "Oś w pełni inwariantna i bootstrap-zwalidowana — silny sygnał biologiczny"
+            "Axis fully invariant and bootstrap-validated — strong biological signal"
             if n_sig == len(valid_ds) and n_boot_sig >= 3
-            else "Oś w pełni inwariantna, słaba walidacja bootstrapem — sprawdź batch"
+            else "Axis fully invariant, weak bootstrap validation — check for batch effects"
             if n_sig == len(valid_ds)
-            else "Oś częściowo inwariantna" if n_sig > len(valid_ds) / 2
-            else "Oś niespójna — możliwy artefakt"
+            else "Axis partially invariant" if n_sig > len(valid_ds) / 2
+            else "Axis inconsistent — possible artifact"
         ),
     }
 
@@ -282,10 +282,10 @@ def cross_dataset_rewiring(datasets, gene1=None, gene2=None, **_):
         expr = ds["expr"]
         n = len(expr.columns)
         if gene1 not in expr.index or gene2 not in expr.index:
-            per.append({"dataset": ds["name"], "error": "Brak genów"})
+            per.append({"dataset": ds["name"], "error": "Gene(s) not found"})
             continue
         if n < MIN_SAMPLES:
-            per.append({"dataset": ds["name"], "error": f"Za mało próbek: {n} < {MIN_SAMPLES}"})
+            per.append({"dataset": ds["name"], "error": f"Too few samples: {n} < {MIN_SAMPLES}"})
             continue
         # Spearman correlation is rank-based — appropriate for non-normal expression data
         r, p = stats.spearmanr(expr.loc[gene1].values, expr.loc[gene2].values)
@@ -298,7 +298,7 @@ def cross_dataset_rewiring(datasets, gene1=None, gene2=None, **_):
 
     valid = [x for x in per if "spearman_r" in x]
     if not valid:
-        return {"error": f"Brak danych dla {gene1}, {gene2}"}
+        return {"error": f"No data available for {gene1}, {gene2}"}
 
     cs = [x["spearman_r"] for x in valid]
     rew = float(max(cs) - min(cs))
@@ -308,7 +308,7 @@ def cross_dataset_rewiring(datasets, gene1=None, gene2=None, **_):
         "max_r": round(max(cs), 3),
         "min_r": round(min(cs), 3),
         "rewiring_magnitude": round(rew, 3),
-        "interpretation": "Silny rewiring korelacji między datasetami" if rew > 0.6
-            else "Umiarkowany rewiring" if rew > 0.35
-            else "Stabilna korelacja",
+        "interpretation": "Strong correlation rewiring across datasets" if rew > 0.6
+            else "Moderate rewiring" if rew > 0.35
+            else "Stable correlation across datasets",
     }

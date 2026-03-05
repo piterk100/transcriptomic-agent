@@ -90,7 +90,7 @@ def differential_expression(datasets, datasetName=None, groupA=None, groupB=None
     sB = [s for s in sB if s in expr.columns]
 
     if len(sA) < 2 or len(sB) < 2:
-        return {"error": f"Za mało próbek: {groupA}({len(sA)}), {groupB}({len(sB)})"}
+        return {"error": f"Too few samples: {groupA}({len(sA)}), {groupB}({len(sB)})"}
 
     nA, nB = len(sA), len(sB)
     exprA_vals = expr[sA].values
@@ -154,7 +154,7 @@ def nonlinear_rule(datasets, datasetName=None, geneHigh=None, geneLow=None, targ
     group_col = ds["group_col"]
 
     if geneHigh not in expr.index or geneLow not in expr.index:
-        return {"error": f"Brak genów: {geneHigh}, {geneLow}"}
+        return {"error": f"Genes not found: {geneHigh}, {geneLow}"}
 
     thr_h = float(np.median(expr.loc[geneHigh]))
     thr_l = float(np.median(expr.loc[geneLow]))
@@ -191,7 +191,7 @@ def contextual_modules(datasets, datasetName=None, contextGene=None, topN=20, **
     expr: pd.DataFrame = ds["expr"]
 
     if contextGene not in expr.index:
-        return {"error": f"Brak genu: {contextGene}"}
+        return {"error": f"Gene not found: {contextGene}"}
 
     ctx_scores = expr.loc[contextGene].sort_values()
     half = len(ctx_scores) // 2
@@ -220,7 +220,7 @@ def contextual_modules(datasets, datasetName=None, contextGene=None, topN=20, **
         "corr_high": round(c_high, 3),
         "corr_low":  round(c_low, 3),
         "specificity": round(abs(c_high - c_low), 3),
-        "interpretation": f"Ko-ekspresja silniejsza gdy {contextGene} {'WYSOKIE' if c_high > c_low else 'NISKIE'}",
+        "interpretation": f"Co-expression stronger when {contextGene} is {'HIGH' if c_high > c_low else 'LOW'}",
     }
 
 
@@ -262,9 +262,9 @@ def pathway_enrichment(datasets, genes=None, **_):
         "n_significant": len(sig),
         "top_enriched": results[:8],
         "interpretation": (
-            f"Najsilniejsze: {results[0]['pathway']} "
+            f"Top enriched: {results[0]['pathway']} "
             f"(k={results[0]['k']}, x{results[0]['enrichment_fold']}, adj_p={results[0]['adj_p']})"
-            if results else "Brak wzbogacenia"
+            if results else "No significant enrichment"
         ),
     }
 
@@ -277,7 +277,7 @@ def batch_detection(datasets, datasetName=None, genes=None, **_):
 
     avail_genes = [g for g in (genes or []) if g in expr.index]
     if not avail_genes:
-        return {"error": "Żaden z podanych genów nie jest dostępny"}
+        return {"error": "None of the provided genes are available in the dataset"}
 
     axis_score = expr.loc[avail_genes].mean(axis=0)
 
@@ -321,8 +321,8 @@ def batch_detection(datasets, datasetName=None, genes=None, **_):
         "batch_signals": raw_results[:5],
         "n_suspicious": len(suspicious),
         "interpretation": (
-            f"UWAGA: oś koreluje z {', '.join(r['metadata_col'] for r in suspicious)} — możliwy batch artefakt"
-            if suspicious else "Brak podejrzanych batch sygnałów (F-test BH-adjusted)"
+            f"WARNING: axis correlates with {', '.join(r['metadata_col'] for r in suspicious)} — possible batch artifact"
+            if suspicious else "No suspicious batch signals detected (F-test BH-adjusted)"
         ),
     }
 
@@ -336,7 +336,7 @@ def subgroup_discovery(datasets, datasetName=None, group=None, **_):
     samples = meta.index[meta[group_col] == group].tolist()
     samples = [s for s in samples if s in expr.columns]
     if len(samples) < 4:
-        return {"error": f"Za mało próbek w grupie '{group}': {len(samples)}"}
+        return {"error": f"Too few samples in group '{group}': {len(samples)}"}
 
     top_genes = expr[samples].var(axis=1).nlargest(100).index.tolist()
     sub_expr = expr.loc[top_genes, samples].T  # samples x genes
@@ -351,7 +351,7 @@ def subgroup_discovery(datasets, datasetName=None, group=None, **_):
     sub2 = [samples[i] for i, l in enumerate(labels) if l == 1]
 
     if len(sub1) < 2 or len(sub2) < 2:
-        return {"error": f"Zbyt mała podgrupa po klasteryzacji: sub1={len(sub1)}, sub2={len(sub2)}"}
+        return {"error": f"Subgroup too small after clustering: sub1={len(sub1)}, sub2={len(sub2)}"}
 
     # MWU test per marker gene + BH correction
     raw_ps, raw_markers = [], []
@@ -383,8 +383,8 @@ def subgroup_discovery(datasets, datasetName=None, group=None, **_):
         "top_markers_sub1": [m for m in sig_markers if m["logFC"] > 0][:10],
         "top_markers_sub2": [m for m in sig_markers if m["logFC"] < 0][:10],
         "interpretation": (
-            f"Wewnątrz '{group}' wykryto 2 podgrupy ({len(sub1)} vs {len(sub2)} próbek, PCA+KMeans), "
-            f"{len(sig_markers)} genów markerowych (MWU adj_p<0.05)"
+            f"Detected 2 subgroups within '{group}' ({len(sub1)} vs {len(sub2)} samples, PCA+KMeans), "
+            f"{len(sig_markers)} marker genes (MWU adj_p<0.05)"
         ),
     }
 
@@ -397,7 +397,7 @@ def gene_network_hub(datasets, datasetName=None, topN=30, corrThreshold=0.6, **_
     variances = expr.var(axis=1)
     top_genes = [g for g in variances.nlargest(200).index if variances[g] > 0][:150]
     if len(top_genes) < 2:
-        return {"error": "Za mało zmiennych genów do analizy sieci"}
+        return {"error": "Too few variable genes for network analysis"}
     sub = expr.loc[top_genes].values  # genes x samples
 
     corr_mat = np.corrcoef(sub)  # genes x genes
@@ -424,5 +424,5 @@ def gene_network_hub(datasets, datasetName=None, topN=30, corrThreshold=0.6, **_
         "n_genes_tested": len(top_genes),
         "top_hubs": top_hubs,
         "top_edges": edges[:20],
-        "interpretation": f"Największy hub: {top_hubs[0]['gene']} ({top_hubs[0]['degree']} połączeń)" if top_hubs else "Brak hubów przy tym progu",
+        "interpretation": f"Top hub: {top_hubs[0]['gene']} ({top_hubs[0]['degree']} connections)" if top_hubs else "No hubs found at this threshold",
     }

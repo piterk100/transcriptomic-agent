@@ -31,7 +31,7 @@ CROSS_TOOL_NAMES = {
 
 def summarize_result(action: str, r: dict) -> str:
     if isinstance(r, dict) and r.get("error"):
-        return f"BŁĄD: {r['error']}"
+        return f"ERROR: {r['error']}"
     try:
         m = {
             "dataset_summary":           lambda: f"{len(r)} datasetów",

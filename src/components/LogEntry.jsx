@@ -19,10 +19,10 @@ const ACTION_COLORS = {
 };
 
 const VERDICT_STYLE = {
-  confirmed: { color: "#3dcc7a", icon: "✓", label: "POTWIERDZONA" },
-  rejected:  { color: "#cc4444", icon: "✗", label: "ODRZUCONA"   },
-  uncertain: { color: "#ccaa44", icon: "?", label: "NIEPEWNA"    },
-  pending:   { color: "#5588aa", icon: "○", label: "OCZEKUJE"    },
+  confirmed: { color: "#3dcc7a", icon: "✓", label: "CONFIRMED" },
+  rejected:  { color: "#cc4444", icon: "✗", label: "REJECTED"  },
+  uncertain: { color: "#ccaa44", icon: "?", label: "UNCERTAIN"  },
+  pending:   { color: "#5588aa", icon: "○", label: "PENDING"    },
 };
 
 const TYPE_STYLES = {
@@ -61,7 +61,7 @@ export default function LogEntry({ entry }) {
 
           {entry.type === "code" && (
             <div>
-              <div style={{ fontSize: 11, color: "#8866cc", marginBottom: 5 }}>⌥ agent pisze własny kod</div>
+              <div style={{ fontSize: 11, color: "#8866cc", marginBottom: 5 }}>⌥ agent writing custom code</div>
               <pre style={{ padding: 10, background: "#0e0e1a", border: "1px solid #2a2a4a", fontSize: 11, color: "#aa88ee", overflowX: "auto", maxHeight: 150, lineHeight: 1.6, borderRadius: 3 }}>
                 {entry.code}
               </pre>
@@ -94,7 +94,7 @@ export default function LogEntry({ entry }) {
                 <span className="tag" style={{ background: "#2a4a7a", color: "#88aadd", fontSize: 10, border: "none" }}>
                   {entry.hypothesis.id}
                 </span>
-                <span style={{ fontSize: 11, color: "#5588aa", letterSpacing: 1 }}>NOWA HIPOTEZA</span>
+                <span style={{ fontSize: 11, color: "#5588aa", letterSpacing: 1 }}>NEW HYPOTHESIS</span>
               </div>
               <div style={{ fontSize: 13, color: "#88aabb", lineHeight: 1.7 }}>{entry.hypothesis.text}</div>
             </div>
@@ -119,10 +119,10 @@ export default function LogEntry({ entry }) {
 
           {entry.type === "seed" && (
             <div style={{ padding: "8px 10px", background: "#0d0f18", border: "1px solid #2a3a5a", borderRadius: 3 }}>
-              <div style={{ fontSize: 11, color: "#5577aa", letterSpacing: 1, marginBottom: 5 }}>⬡ PRE-ANALIZA STATYSTYCZNA</div>
+              <div style={{ fontSize: 11, color: "#5577aa", letterSpacing: 1, marginBottom: 5 }}>⬡ STATISTICAL PRE-ANALYSIS</div>
               {entry.summary
                 ? <div style={{ fontSize: 11, color: "#4466aa", lineHeight: 1.7, whiteSpace: "pre-line" }}>{entry.summary}</div>
-                : <div style={{ fontSize: 11, color: "#334466" }}>Brak wspólnych grup między datasetami — agent startuje bez seedów.</div>
+                : <div style={{ fontSize: 11, color: "#334466" }}>No common groups across datasets — agent starting without seed hypotheses.</div>
               }
             </div>
           )}

@@ -17,7 +17,7 @@ async def run_agent_loop(
 ) -> AsyncGenerator[dict, None]:
     """
     Async generator — yields log event dicts.
-    Konsumowany przez FastAPI StreamingResponse.
+    Consumed by FastAPI StreamingResponse.
     """
     client = anthropic.AsyncAnthropic(api_key=api_key)
 
@@ -32,7 +32,7 @@ async def run_agent_loop(
     hypotheses: list[dict] = list(seeds)   # pre-populated with S1, S2, ...
     hypo_counter = 0                        # agent-proposed: H1, H2, ...
 
-    yield {"type": "seed", "text": f"Pre-analiza: {len(seeds)} hipotez zasianych", "summary": seed_summary}
+    yield {"type": "seed", "text": f"Pre-analysis: {len(seeds)} seed hypotheses generated", "summary": seed_summary}
     for s in seeds:
         yield {"type": "hypothesis_propose", "hypothesis": dict(s)}
 
@@ -40,20 +40,20 @@ async def run_agent_loop(
         step_num = i + 1
 
         discovery_summary = (
-            "Odkrycia:\n" + "\n".join(f"- [{d['action']}] {d['summary']}" for d in discoveries[-8:])
-            if discoveries else "Pierwszy krok."
+            "Discoveries:\n" + "\n".join(f"- [{d['action']}] {d['summary']}" for d in discoveries[-8:])
+            if discoveries else "First step."
         )
         hypo_summary = (
-            "\nHIPOTEZY:\n" + "\n".join(f"  [{h['id']}][{h['status'].upper()}] {h['text']}" for h in hypotheses)
+            "\nHYPOTHESES:\n" + "\n".join(f"  [{h['id']}][{h['status'].upper()}] {h['text']}" for h in hypotheses)
             if hypotheses else ""
         )
 
         messages.append({
             "role": "user",
-            "content": f"Krok {step_num}/{max_steps}. {discovery_summary}{hypo_summary}\n\nCo zbadasz?",
+            "content": f"Step {step_num}/{max_steps}. {discovery_summary}{hypo_summary}\n\nWhat will you investigate?",
         })
 
-        yield {"type": "thinking", "text": f"Agent myśli... ({step_num}/{max_steps})"}
+        yield {"type": "thinking", "text": f"Agent thinking... ({step_num}/{max_steps})"}
 
         try:
             response = await client.messages.create(
@@ -64,14 +64,14 @@ async def run_agent_loop(
             )
             raw = response.content[0].text if response.content else ""
         except Exception as e:
-            yield {"type": "error", "text": f"API: {e}"}
+            yield {"type": "error", "text": f"API error: {e}"}
             return
 
         m = re.search(r"\{[\s\S]*\}", raw)
         try:
             dec = json.loads(m.group(0) if m else raw)
         except json.JSONDecodeError:
-            yield {"type": "error", "text": f"Parse: {raw[:200]}"}
+            yield {"type": "error", "text": f"JSON parse error: {raw[:200]}"}
             messages.append({"role": "assistant", "content": raw})
             continue
 
@@ -106,7 +106,7 @@ async def run_agent_loop(
             code = params.get("code", "")
             yield {"type": "code", "code": code}
             result = execute_sandbox(code, datasets)
-            summary = f"BŁĄD: {result['error']}" if isinstance(result, dict) and result.get("error") else f"Kod wykonany: {str(result)[:80]}"
+            summary = f"ERROR: {result['error']}" if isinstance(result, dict) and result.get("error") else f"Code executed: {str(result)[:80]}"
             discoveries.append({"action": action, "params": params, "summary": summary, "result": result})
             yield {"type": "result", "action": action, "params": params, "result": result, "summary": summary, "isCross": False, "isDynamic": True}
         elif action in TOOLS:
@@ -122,8 +122,8 @@ async def run_agent_loop(
                 result = {"error": str(e)}
                 yield {"type": "error", "text": f"{action}: {e}"}
         else:
-            result = {"error": f"Nieznane narzędzie: {action}"}
-            yield {"type": "error", "text": f"Nieznane narzędzie: {action}"}
+            result = {"error": f"Unknown tool: {action}"}
+            yield {"type": "error", "text": f"Unknown tool: {action}"}
 
         # Process evaluate AFTER tool call
         if isinstance(hypo_action, dict) and hypo_action.get("type") == "evaluate" and hypo_action.get("hypothesis_id"):

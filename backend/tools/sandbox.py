@@ -5,9 +5,9 @@ from scipy import stats
 
 def execute_sandbox(code: str, datasets: list) -> dict:
     """
-    Wykonuje kod Pythona napisany przez agenta.
-    Dostępne zmienne: datasets, np, pd, stats
-    Kod powinien ustawić zmienną `result`.
+    Executes Python code written by the agent.
+    Available variables: datasets, np, pd, stats
+    Code must set the `result` variable before finishing.
     """
     context = {
         "datasets": datasets,
@@ -27,7 +27,7 @@ def execute_sandbox(code: str, datasets: list) -> dict:
                 result = {k: (v.tolist() if hasattr(v, "tolist") else v) for k, v in candidates.items()
                           if isinstance(v, (int, float, str, list, dict, bool))}
         if not result:
-            return {"error": "Kod nie ustawił zmiennej `result`"}
+            return {"error": "Code did not set the `result` variable"}
         return result
     except Exception as e:
         return {"error": f"Sandbox error: {type(e).__name__}: {e}", "code_attempted": code[:300]}

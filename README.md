@@ -1,78 +1,86 @@
 # Transcriptomic Agent
 
-Autonomiczny agent AI do odkrywania powiązań transkryptomicznych w wielu datasetach jednocześnie.
+Autonomous AI agent for discovering transcriptomic relationships across multiple datasets simultaneously.
 
-## Uruchomienie
+## Getting Started
 
 ```bash
+# Frontend
 npm install
 npm start
 ```
 
-Otwórz [http://localhost:3000](http://localhost:3000)
+```bash
+# Backend (separate terminal)
+source .venv/bin/activate
+pip install -r backend/requirements.txt
+uvicorn backend.main:app --reload
+```
 
-## Struktura projektu
+Set `ANTHROPIC_API_KEY` in `backend/.env` (see `backend/.env.example`).
+
+Open [http://localhost:3000](http://localhost:3000)
+
+## Project Structure
 
 ```
 src/
-├── utils/
-│   ├── math.js          # funkcje matematyczne (t-test, BH, korelacja, Cohen's d…)
-│   └── parser.js        # parsowanie CSV, macierzy ekspresji, metadanych
-│
-├── tools/
-│   ├── singleDataset.js # narzędzia dla jednego datasetu
-│   ├── crossDataset.js  # narzędzia cross-dataset (IRM, meta-DE, rewiring…)
-│   └── index.js         # rejestr narzędzi + sandbox + summarizeResult
-│
-├── agent/
-│   ├── systemPrompt.js  # budowanie system promptu agenta
-│   └── runner.js        # pętla agenta (LLM → wybór narzędzia → wynik → loop)
-│
 ├── components/
-│   ├── DatasetSlot.jsx  # komponent slotu do wgrywania plików
-│   └── LogEntry.jsx     # komponent wpisu w logu agenta
-│
-├── App.jsx              # główny komponent, UI
+│   ├── DatasetSlot.jsx  # file upload slot component
+│   └── LogEntry.jsx     # agent log entry component
+├── App.jsx              # main component, UI
 └── index.js             # entry point
+
+backend/
+├── tools/
+│   ├── single.py        # single-dataset tools
+│   ├── cross.py         # cross-dataset tools (IRM, meta-DE, rewiring...)
+│   ├── sandbox.py       # execute_code sandbox
+│   └── registry.py      # tool registry + summarizeResult
+├── agent/
+│   ├── system_prompt.py # agent system prompt builder
+│   ├── seeder.py        # pre-analysis seed hypothesis generator
+│   └── runner.py        # agent loop (LLM → tool selection → result → loop)
+└── main.py              # FastAPI app
 ```
 
-## Jak dodać nowe narzędzie
+## Adding a New Tool
 
-1. Napisz funkcję w `src/tools/singleDataset.js` lub `src/tools/crossDataset.js`
-   - Przyjmuje `{ datasets, ...params }`
-   - Zwraca plain JSON object z wynikami i polem `interpretation`
+1. Write a function in `backend/tools/single.py` or `backend/tools/cross.py`
+   - Signature: `fn(datasets, **params) -> dict`
+   - Return a plain dict with results and an `interpretation` string field
 
-2. Dodaj wpis do `summarizeResult()` w `src/tools/index.js`
+2. Register it in `backend/tools/registry.py`: add to `TOOLS` dict and add a summary lambda in `summarize_result()`
 
-3. Zaktualizuj `buildSystemPrompt()` w `src/agent/systemPrompt.js` — dopisz narzędzie do listy
+3. Document it in `backend/agent/system_prompt.py` — add the tool to the appropriate list
 
-Agent automatycznie je zobaczy i będzie mógł wywoływać.
+The agent will automatically see it and be able to call it.
 
-## Narzędzia
+## Tools
 
 ### Single-dataset
-| Narzędzie | Opis |
+| Tool | Description |
 |---|---|
-| `dataset_summary` | Przegląd wszystkich wczytanych datasetów |
-| `top_variable_genes` | Top N genów o największej wariancji |
-| `differential_expression` | DE między dwoma grupami (t-test + BH) |
-| `gene_expression_by_group` | Średnia ekspresja genów w każdej grupie |
-| `nonlinear_rule` | Reguła AND: GEN_A > próg AND GEN_B <= próg → grupa |
-| `contextual_modules` | Ko-ekspresja zależna od kontekstu (mediacja przez gen) |
-| `pathway_enrichment` | Wzbogacenie w 12 pathway (Hallmarks + KEGG) |
-| `batch_detection` | Wykrywanie batch artefaktów w odkrytych osiach |
-| `subgroup_discovery` | Podgrupy wewnątrz jednej grupy (PCA power iteration) |
-| `gene_network_hub` | Huby sieci ko-ekspresji |
+| `dataset_summary` | Overview of all loaded datasets |
+| `top_variable_genes` | Top N genes by highest variance |
+| `differential_expression` | DE between two groups (MWU + BH) |
+| `gene_expression_by_group` | Mean expression of genes per group |
+| `nonlinear_rule` | AND rule: GENE_A > threshold AND GENE_B <= threshold → group |
+| `contextual_modules` | Context-dependent co-expression (mediated by a gene) |
+| `pathway_enrichment` | Enrichment against 12 pathways (Hallmarks + KEGG) |
+| `batch_detection` | Batch artifact detection for discovered axes |
+| `subgroup_discovery` | Subgroups within a single group (PCA + KMeans) |
+| `gene_network_hub` | Co-expression network hubs |
 
 ### Cross-dataset
-| Narzędzie | Opis |
+| Tool | Description |
 |---|---|
-| `cross_dataset_de` | Geny DE w tym samym kierunku we WSZYSTKICH datasetach |
-| `cross_dataset_correlation` | Replikacja modułu ko-ekspresji między kohortami |
-| `invariant_axis` | Oś biologiczna inwariantna (IRM-style, Cohen's d stability) |
-| `cross_dataset_rewiring` | Zmiana korelacji między parą genów między datasetami |
+| `cross_dataset_de` | Genes DE in the same direction across ALL datasets (Fisher's method) |
+| `cross_dataset_correlation` | Co-expression module replication across cohorts |
+| `invariant_axis` | Biologically invariant axis (IRM-style, Cohen's d stability + bootstrap) |
+| `cross_dataset_rewiring` | Correlation change between a gene pair across datasets |
 
-### Dynamiczny
-| Narzędzie | Opis |
+### Dynamic
+| Tool | Description |
 |---|---|
-| `execute_code` | Agent pisze własny JS gdy żadne narzędzie nie wystarczy |
+| `execute_code` | Agent writes custom Python when no existing tool is sufficient |

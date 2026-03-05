@@ -100,7 +100,7 @@ class RunRequest(BaseModel):
 async def run_agent(req: RunRequest):
     api_key = os.getenv("ANTHROPIC_API_KEY", "")
     if not api_key:
-        raise HTTPException(status_code=500, detail="Brak ANTHROPIC_API_KEY w .env")
+        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not set in .env")
 
     datasets = []
     for ds_id in req.dataset_ids:

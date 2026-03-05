@@ -15,13 +15,13 @@ export default function DatasetSlot({ slot, onUpdate, onRemove, canRemove }) {
       <label className={`uz ${slot.exprFile ? "ok" : ""}`}>
         <input type="file" accept=".csv" style={{ display: "none" }} onChange={e => onUpdate("exprFile", e.target.files[0])} />
         <span style={{ fontSize: 12, color: slot.exprFile ? "#3dcc7a" : "#3a6a4a" }}>
-          {slot.exprFile ? `✓ ${slot.exprFile.name.slice(0, 24)}` : "+  macierz ekspresji"}
+          {slot.exprFile ? `✓ ${slot.exprFile.name.slice(0, 24)}` : "+  expression matrix"}
         </span>
       </label>
       <label className={`uz ${slot.metaFile ? "ok" : ""}`}>
         <input type="file" accept=".csv" style={{ display: "none" }} onChange={e => onUpdate("metaFile", e.target.files[0])} />
         <span style={{ fontSize: 12, color: slot.metaFile ? "#3dcc7a" : "#3a6a4a" }}>
-          {slot.metaFile ? `✓ ${slot.metaFile.name.slice(0, 24)}` : "+  metadane (pheno)"}
+          {slot.metaFile ? `✓ ${slot.metaFile.name.slice(0, 24)}` : "+  metadata (pheno)"}
         </span>
       </label>
     </div>

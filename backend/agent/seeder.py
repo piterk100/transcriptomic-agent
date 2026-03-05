@@ -1,6 +1,7 @@
 """
 Pre-analysis seeder: lightweight statistical analysis run before the agent loop to
 generate data-driven seed hypotheses and provide structured evidence extraction.
+IDs are S1, S2, ... (distinct from agent-proposed H1, H2, ...).
 """
 from __future__ import annotations
 
@@ -17,7 +18,6 @@ def generate_seeds(datasets: list) -> tuple[list[dict], str]:
     Run quick pre-analysis and return (seed_hypotheses, seed_summary_text).
 
     seed_hypotheses: list of hypothesis dicts with status="pending", seeded_by="auto".
-                     IDs are S1, S2, ... (distinct from agent-proposed H1, H2, ...).
     seed_summary_text: compact multi-line string injected into the system prompt.
     """
     seeds: list[dict] = []
@@ -32,7 +32,7 @@ def generate_seeds(datasets: list) -> tuple[list[dict], str]:
                 gene_names = [g["gene"] for g in topv[:5]]
                 if gene_names:
                     summary_lines.append(
-                        f"  {ds['name']} — top zmienne: {', '.join(gene_names)}"
+                        f"  {ds['name']} — top variable: {', '.join(gene_names)}"
                     )
             except Exception:
                 pass
@@ -64,14 +64,14 @@ def generate_seeds(datasets: list) -> tuple[list[dict], str]:
             seed_n += 1
             gene = entry["gene"]
             gA, gB = entry["_groupA"], entry["_groupB"]
-            direction_pl = "nadeksprymowany" if entry["_dir"] == "UP" else "niedoeksprymowany"
+            direction_str = "overexpressed" if entry["_dir"] == "UP" else "underexpressed"
             n_ds = entry.get("n_datasets", len(datasets))
             adj_p = entry.get("fisher_adj_p")
             lfc = entry.get("avg_abs_logFC")
 
             text = (
-                f"{gene} jest konsekwentnie {direction_pl} w {gA} vs {gB} "
-                f"we wszystkich {n_ds} datasetach"
+                f"{gene} is consistently {direction_str} in {gA} vs {gB} "
+                f"across all {n_ds} datasets"
                 + (f" (avg_|logFC|={lfc}, fisher_adj_p={adj_p})" if lfc and adj_p else "")
             )
             seeds.append({
@@ -92,7 +92,7 @@ def generate_seeds(datasets: list) -> tuple[list[dict], str]:
         pass  # graceful degradation: agent starts without seeds
 
     seed_summary = (
-        "Wyniki pre-analizy statystycznej:\n" + "\n".join(summary_lines)
+        "Pre-analysis statistical results:\n" + "\n".join(summary_lines)
         if summary_lines else ""
     )
     return seeds, seed_summary

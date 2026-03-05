@@ -136,27 +136,27 @@ export default function App() {
         <div style={{ width: 8, height: 8, borderRadius: "50%", background: phase === "running" ? "#3dcc7a" : "#223322", boxShadow: phase === "running" ? "0 0 10px #3dcc7a" : "none" }} className={phase === "running" ? "blink" : ""} />
         <span style={{ fontFamily: "'Syne',sans-serif", fontSize: 17, fontWeight: 800, letterSpacing: 3, color: "#3dcc7a" }}>TRANSCRIPTOMIC AGENT</span>
         <span style={{ fontSize: 11, color: "#2a5a3a", letterSpacing: 2 }}>/ MULTI-DATASET · CROSS-COHORT</span>
-        {phase === "running" && <span style={{ marginLeft: "auto", fontSize: 12, color: "#3a7a4a" }}>KROK {step}/{maxSteps}</span>}
+        {phase === "running" && <span style={{ marginLeft: "auto", fontSize: 12, color: "#3a7a4a" }}>STEP {step}/{maxSteps}</span>}
       </div>
 
       <div style={{ display: "flex", height: "calc(100vh - 58px)" }}>
 
         {/* LEFT PANEL */}
         <div style={{ width: 290, borderRight: "1px solid #1a2e1a", padding: "16px 14px", overflowY: "auto", flexShrink: 0 }}>
-          <div className="sec">// DATASETY</div>
+          <div className="sec">// DATASETS</div>
 
           {slots.map(slot => (
             <DatasetSlot key={slot.id} slot={slot} canRemove={slots.length > 1}
               onUpdate={(k, v) => updSlot(slot.id, k, v)} onRemove={() => removeSlot(slot.id)} />
           ))}
 
-          <button className="btn bsm" style={{ marginBottom: 8, width: "100%" }} onClick={addSlot}>+ DODAJ DATASET</button>
+          <button className="btn bsm" style={{ marginBottom: 8, width: "100%" }} onClick={addSlot}>+ ADD DATASET</button>
           <button className="btn" style={{ marginBottom: 12 }} onClick={loadAll} disabled={!slots.some(s => s.exprFile && s.metaFile)}>
-            WCZYTAJ DANE
+            LOAD DATA
           </button>
 
           {loaded.length > 0 && <>
-            <div className="sec">// KOLUMNY GRUP</div>
+            <div className="sec">// GROUP COLUMNS</div>
             {loaded.map(ds => (
               <div key={ds.id} style={{ marginBottom: 14 }}>
                 <div style={{ fontSize: 12, color: "#4a9a6a", marginBottom: 5, fontWeight: 600 }}>{ds.name}</div>
@@ -166,16 +166,16 @@ export default function App() {
                 <div style={{ fontSize: 12, color: "#3a6a4a", marginTop: 5, lineHeight: 2 }}>
                   {ds.groups.map(g => <div key={g}>▸ {g}</div>)}
                 </div>
-                <div style={{ fontSize: 11, color: "#2a5a3a", marginTop: 4 }}>{ds.gene_count} genów · {ds.sample_count} próbek</div>
+                <div style={{ fontSize: 11, color: "#2a5a3a", marginTop: 4 }}>{ds.gene_count} genes · {ds.sample_count} samples</div>
               </div>
             ))}
 
-            <div className="sec">// MAX KROKÓW</div>
+            <div className="sec">// MAX STEPS</div>
             <input type="number" value={maxSteps} min={3} max={30} onChange={e => setMaxSteps(parseInt(e.target.value))} style={{ marginBottom: 12 }} />
 
             <button className="btn" style={{ background: phase === "running" ? "#080e0a" : "transparent" }}
               onClick={phase === "running" ? () => abortRef.current?.abort() : runAgent}>
-              {phase === "running" ? "■ STOP" : "▶ START AGENTA"}
+              {phase === "running" ? "■ STOP" : "▶ START AGENT"}
             </button>
           </>}
         </div>
@@ -185,7 +185,7 @@ export default function App() {
           {log.length === 0 && (
             <div style={{ textAlign: "center", marginTop: 100 }}>
               <div style={{ fontSize: 36, opacity: .1, marginBottom: 14 }}>⬡</div>
-              <div style={{ fontSize: 14, color: "#2a5a3a" }}>Wczytaj kilka datasetów i uruchom agenta</div>
+              <div style={{ fontSize: 14, color: "#2a5a3a" }}>Load datasets and start the agent</div>
               <div style={{ fontSize: 12, color: "#1a3a22", marginTop: 8 }}>Backend: <code style={{color:"#2a5a3a"}}>uvicorn backend.main:app --reload</code></div>
             </div>
           )}
@@ -196,8 +196,8 @@ export default function App() {
         {/* HYPOTHESIS PANEL */}
         {(phase === "running" || hypotheses.length > 0) && (
           <div style={{ width: 270, borderLeft: "1px solid #1a2e1a", padding: "16px 14px", overflowY: "auto", flexShrink: 0, background: "#09090e" }}>
-            <div className="sec">// HIPOTEZY</div>
-            {hypotheses.length === 0 && <div style={{ fontSize: 12, color: "#2a4a2a" }}>Agent formułuje hipotezy...</div>}
+            <div className="sec">// HYPOTHESES</div>
+            {hypotheses.length === 0 && <div style={{ fontSize: 12, color: "#2a4a2a" }}>Agent is formulating hypotheses...</div>}
             {hypotheses.map(h => {
               const vs = VERDICT_STYLE[h.status] || VERDICT_STYLE.pending;
               return (
