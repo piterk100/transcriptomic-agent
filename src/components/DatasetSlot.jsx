@@ -21,7 +21,7 @@ export default function DatasetSlot({ slot, onUpdate, onRemove, canRemove }) {
       <label className={`uz ${slot.metaFile ? "ok" : ""}`}>
         <input type="file" accept=".csv" style={{ display: "none" }} onChange={e => onUpdate("metaFile", e.target.files[0])} />
         <span style={{ fontSize: 14, color: slot.metaFile ? "#3dcc7a" : "#3a6a4a" }}>
-          {slot.metaFile ? `✓ ${slot.metaFile.name.slice(0, 24)}` : "+  metadata (pheno)"}
+          {slot.metaFile ? `✓ ${slot.metaFile.name.slice(0, 24)}` : "+  metadata"}
         </span>
       </label>
     </div>
