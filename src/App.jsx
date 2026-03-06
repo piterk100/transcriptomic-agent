@@ -9,6 +9,8 @@ const STYLES = `
   ::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:#0d0d0d}::-webkit-scrollbar-thumb{background:#2a4a32}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
   @keyframes si{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes dots{0%,100%{content:''}33%{content:'.'}66%{content:'..'}99%{content:'...'}}
+  .thinking-indicator::after{content:'';animation:dots 1.2s steps(1) infinite}
   .ent{animation:si .2s ease}
   .blink{animation:pulse 1.5s infinite}
   .btn{background:transparent;border:1px solid #2a5a3a;color:#3dcc7a;font-family:inherit;font-size:14px;padding:9px 16px;cursor:pointer;letter-spacing:2px;text-transform:uppercase;transition:all .15s;width:100%}
@@ -41,8 +43,9 @@ export default function App() {
   const [phase,      setPhase]      = useState("upload");
   const [log,        setLog]        = useState([]);
   const [hypotheses, setHypotheses] = useState([]);
-  const [step,       setStep]       = useState(0);
-  const [maxSteps,   setMaxSteps]   = useState(15);
+  const [step,          setStep]          = useState(0);
+  const [maxSteps,      setMaxSteps]      = useState(15);
+  const [currentStatus, setCurrentStatus] = useState("");
   const logEnd   = useRef(null);
   const abortRef = useRef(null);
 
@@ -79,7 +82,7 @@ export default function App() {
 
   const runAgent = async () => {
     if (!loaded.length) return;
-    setPhase("running"); setLog([]); setStep(0); setHypotheses([]);
+    setPhase("running"); setLog([]); setStep(0); setHypotheses([]); setCurrentStatus("");
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -115,7 +118,7 @@ export default function App() {
           try {
             const entry = JSON.parse(line.slice(6));
             if (entry.type === "stream_end") { reader.cancel(); break; }
-            if (entry.type === "thinking")          { setStep(++currentStep); continue; }
+            if (entry.type === "thinking")          { setStep(++currentStep); setCurrentStatus(entry.text); continue; }
             if (entry.type === "hypothesis_propose") setHypotheses(prev => [...prev, entry.hypothesis]);
             if (entry.type === "hypothesis_eval")    setHypotheses(prev => prev.map(h => h.id === entry.hypothesis.id ? entry.hypothesis : h));
             addLog(entry);
@@ -125,6 +128,7 @@ export default function App() {
     } catch (e) {
       if (e.name !== "AbortError") addLog({ type: "error", text: `Stream: ${e.message}` });
     }
+    setCurrentStatus("");
     setPhase("done");
   };
 
@@ -190,6 +194,12 @@ export default function App() {
             </div>
           )}
           {log.map(e => <LogEntry key={e.id} entry={e} />)}
+          {currentStatus && (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8, padding: "10px 14px", borderLeft: "3px solid #1e3a22", opacity: 0.85 }}>
+              <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#3dcc7a", boxShadow: "0 0 8px #3dcc7a" }} className="blink" />
+              <span className="thinking-indicator" style={{ fontSize: 13, color: "#3a7a4a", letterSpacing: 1 }}>{currentStatus}</span>
+            </div>
+          )}
           <div ref={logEnd} />
         </div>
 
