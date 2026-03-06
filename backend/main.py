@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import uuid
 from io import StringIO
@@ -14,6 +15,14 @@ from pydantic import BaseModel
 from .agent.runner import run_agent_loop
 
 load_dotenv()
+
+logging.basicConfig(
+    filename="backend/app.log",
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
@@ -53,6 +62,7 @@ async def upload_dataset(
     name: str = Form(...),
     dataset_id: Optional[str] = Form(None),
 ):
+    logger.info("Upload dataset: name=%s", name)
     expr_text = (await expr_file.read()).decode("utf-8")
     meta_text = (await meta_file.read()).decode("utf-8")
 
@@ -113,9 +123,14 @@ async def run_agent(req: RunRequest):
             ds["groups"] = ds["meta"][chosen_col].dropna().unique().tolist()
         datasets.append(ds)
 
+    logger.info("Run started: datasets=%s max_steps=%d", req.dataset_ids, req.max_steps)
+
     async def generate():
         async for event in run_agent_loop(datasets, req.max_steps, api_key):
+            if event.get("type") == "error":
+                logger.error("Agent error: %s", event.get("text", ""))
             yield f"data: {json.dumps(event, default=str)}\n\n"
+        logger.info("Run finished: datasets=%s", req.dataset_ids)
         yield "data: {\"type\":\"stream_end\"}\n\n"
 
     return StreamingResponse(

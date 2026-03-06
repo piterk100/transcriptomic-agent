@@ -1,8 +1,11 @@
 import json
+import logging
 import re
 from typing import AsyncGenerator
 
 import anthropic
+
+logger = logging.getLogger(__name__)
 
 from ..agent.system_prompt import build_system_prompt
 from ..agent.seeder import generate_seeds, extract_evidence_stats
@@ -64,6 +67,7 @@ async def run_agent_loop(
             )
             raw = response.content[0].text if response.content else ""
         except Exception as e:
+            logger.error("API error at step %d: %s", step_num, e, exc_info=True)
             yield {"type": "error", "text": f"API error: {e}"}
             return
 
@@ -71,6 +75,7 @@ async def run_agent_loop(
         try:
             dec = json.loads(m.group(0) if m else raw)
         except json.JSONDecodeError:
+            logger.error("JSON parse error at step %d: %s", step_num, raw[:200])
             yield {"type": "error", "text": f"JSON parse error: {raw[:200]}"}
             messages.append({"role": "assistant", "content": raw})
             continue
@@ -119,9 +124,11 @@ async def run_agent_loop(
                     "summary": summary, "isCross": action in CROSS_TOOL_NAMES, "isDynamic": False,
                 }
             except Exception as e:
+                logger.error("Tool error [%s] at step %d: %s", action, step_num, e, exc_info=True)
                 result = {"error": str(e)}
                 yield {"type": "error", "text": f"{action}: {e}"}
         else:
+            logger.error("Unknown tool [%s] at step %d", action, step_num)
             result = {"error": f"Unknown tool: {action}"}
             yield {"type": "error", "text": f"Unknown tool: {action}"}
 
