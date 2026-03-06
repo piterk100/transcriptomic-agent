@@ -82,7 +82,7 @@ export default function App() {
 
   const runAgent = async () => {
     if (!loaded.length) return;
-    setPhase("running"); setLog([]); setStep(0); setHypotheses([]); setCurrentStatus("");
+    setPhase("running"); setLog([]); setStep(0); setHypotheses([]); setCurrentStatus("Running pre-analysis...");
 
     const controller = new AbortController();
     abortRef.current = controller;
