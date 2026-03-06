@@ -11,17 +11,17 @@ const STYLES = `
   @keyframes si{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
   .ent{animation:si .2s ease}
   .blink{animation:pulse 1.5s infinite}
-  .btn{background:transparent;border:1px solid #2a5a3a;color:#3dcc7a;font-family:inherit;font-size:12px;padding:9px 16px;cursor:pointer;letter-spacing:2px;text-transform:uppercase;transition:all .15s;width:100%}
+  .btn{background:transparent;border:1px solid #2a5a3a;color:#3dcc7a;font-family:inherit;font-size:14px;padding:9px 16px;cursor:pointer;letter-spacing:2px;text-transform:uppercase;transition:all .15s;width:100%}
   .btn:hover{background:#0c1f16;border-color:#3dcc7a}.btn:disabled{opacity:.3;cursor:not-allowed}
-  .bsm{padding:5px 12px;width:auto;font-size:11px}.bdng{border-color:#4a2222;color:#cc5555}.bdng:hover{background:#1a0a0a;border-color:#cc5555}
+  .bsm{padding:5px 12px;width:auto;font-size:13px}.bdng{border-color:#4a2222;color:#cc5555}.bdng:hover{background:#1a0a0a;border-color:#cc5555}
   .slot{border:1px solid #1e2e20;padding:14px;margin-bottom:10px;background:#0b0c0f}
   .slot.ok{border-color:#223a28}
-  .uz{border:1px dashed #1e2e20;padding:12px;text-align:center;cursor:pointer;transition:all .15s;background:#0c0c10;display:block;margin-bottom:6px;font-size:12px;color:#3a6a4a}
+  .uz{border:1px dashed #1e2e20;padding:12px;text-align:center;cursor:pointer;transition:all .15s;background:#0c0c10;display:block;margin-bottom:6px;font-size:14px;color:#3a6a4a}
   .uz:hover,.uz.ok{border-color:#3dcc7a;background:#0b160f;color:#3dcc7a}
-  .tag{display:inline-block;padding:3px 8px;border-radius:2px;font-size:11px;font-weight:700;letter-spacing:1px}
-  input[type=text],select{background:#0b0c0f;border:1px solid #1e2e20;color:#ccc;padding:6px 9px;font-size:12px;font-family:inherit;width:100%}
-  input[type=number]{background:#0b0c0f;border:1px solid #1e2e20;color:#3dcc7a;padding:6px 9px;font-size:12px;font-family:inherit;width:100%}
-  .sec{font-size:10px;color:#3a7a4a;letter-spacing:2px;margin:16px 0 9px;font-weight:600}
+  .tag{display:inline-block;padding:3px 8px;border-radius:2px;font-size:12px;font-weight:700;letter-spacing:1px}
+  input[type=text],select{background:#0b0c0f;border:1px solid #1e2e20;color:#ccc;padding:6px 9px;font-size:14px;font-family:inherit;width:100%}
+  input[type=number]{background:#0b0c0f;border:1px solid #1e2e20;color:#3dcc7a;padding:6px 9px;font-size:14px;font-family:inherit;width:100%}
+  .sec{font-size:12px;color:#3a7a4a;letter-spacing:2px;margin:16px 0 9px;font-weight:600}
 `;
 
 const VERDICT_STYLE = {
@@ -134,9 +134,9 @@ export default function App() {
 
       <div style={{ borderBottom: "1px solid #1a2e1a", padding: "16px 28px", display: "flex", alignItems: "center", gap: 12 }}>
         <div style={{ width: 8, height: 8, borderRadius: "50%", background: phase === "running" ? "#3dcc7a" : "#223322", boxShadow: phase === "running" ? "0 0 10px #3dcc7a" : "none" }} className={phase === "running" ? "blink" : ""} />
-        <span style={{ fontFamily: "'Syne',sans-serif", fontSize: 17, fontWeight: 800, letterSpacing: 3, color: "#3dcc7a" }}>TRANSCRIPTOMIC AGENT</span>
-        <span style={{ fontSize: 11, color: "#2a5a3a", letterSpacing: 2 }}>/ MULTI-DATASET · CROSS-COHORT</span>
-        {phase === "running" && <span style={{ marginLeft: "auto", fontSize: 12, color: "#3a7a4a" }}>STEP {step}/{maxSteps}</span>}
+        <span style={{ fontFamily: "'Syne',sans-serif", fontSize: 20, fontWeight: 800, letterSpacing: 3, color: "#3dcc7a" }}>TRANSCRIPTOMIC AGENT</span>
+        <span style={{ fontSize: 13, color: "#2a5a3a", letterSpacing: 2 }}>/ MULTI-DATASET · CROSS-COHORT</span>
+        {phase === "running" && <span style={{ marginLeft: "auto", fontSize: 14, color: "#3a7a4a" }}>STEP {step}/{maxSteps}</span>}
       </div>
 
       <div style={{ display: "flex", height: "calc(100vh - 58px)" }}>
@@ -159,14 +159,14 @@ export default function App() {
             <div className="sec">// GROUP COLUMNS</div>
             {loaded.map(ds => (
               <div key={ds.id} style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 12, color: "#4a9a6a", marginBottom: 5, fontWeight: 600 }}>{ds.name}</div>
+                <div style={{ fontSize: 14, color: "#4a9a6a", marginBottom: 5, fontWeight: 600 }}>{ds.name}</div>
                 <select value={groupMap[ds.id] || ds.group_col} onChange={e => setGroupMap(prev => ({ ...prev, [ds.id]: e.target.value }))}>
                   {ds.group_cols.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
-                <div style={{ fontSize: 12, color: "#3a6a4a", marginTop: 5, lineHeight: 2 }}>
+                <div style={{ fontSize: 13, color: "#3a6a4a", marginTop: 5, lineHeight: 2 }}>
                   {ds.groups.map(g => <div key={g}>▸ {g}</div>)}
                 </div>
-                <div style={{ fontSize: 11, color: "#2a5a3a", marginTop: 4 }}>{ds.gene_count} genes · {ds.sample_count} samples</div>
+                <div style={{ fontSize: 13, color: "#2a5a3a", marginTop: 4 }}>{ds.gene_count} genes · {ds.sample_count} samples</div>
               </div>
             ))}
 
@@ -185,8 +185,8 @@ export default function App() {
           {log.length === 0 && (
             <div style={{ textAlign: "center", marginTop: 100 }}>
               <div style={{ fontSize: 36, opacity: .1, marginBottom: 14 }}>⬡</div>
-              <div style={{ fontSize: 14, color: "#2a5a3a" }}>Load datasets and start the agent</div>
-              <div style={{ fontSize: 12, color: "#1a3a22", marginTop: 8 }}>Backend: <code style={{color:"#2a5a3a"}}>uvicorn backend.main:app --reload</code></div>
+              <div style={{ fontSize: 16, color: "#2a5a3a" }}>Load datasets and start the agent</div>
+              <div style={{ fontSize: 13, color: "#1a3a22", marginTop: 8 }}>Backend: <code style={{color:"#2a5a3a"}}>uvicorn backend.main:app --reload</code></div>
             </div>
           )}
           {log.map(e => <LogEntry key={e.id} entry={e} />)}
@@ -197,26 +197,26 @@ export default function App() {
         {(phase === "running" || hypotheses.length > 0) && (
           <div style={{ width: 270, borderLeft: "1px solid #1a2e1a", padding: "16px 14px", overflowY: "auto", flexShrink: 0, background: "#09090e" }}>
             <div className="sec">// HYPOTHESES</div>
-            {hypotheses.length === 0 && <div style={{ fontSize: 12, color: "#2a4a2a" }}>Agent is formulating hypotheses...</div>}
+            {hypotheses.length === 0 && <div style={{ fontSize: 13, color: "#2a4a2a" }}>Agent is formulating hypotheses...</div>}
             {hypotheses.map(h => {
               const vs = VERDICT_STYLE[h.status] || VERDICT_STYLE.pending;
               return (
                 <div key={h.id} style={{ marginBottom: 12, padding: "10px 11px", background: "#0b0c0f", border: `1px solid ${vs.color}33`, borderRadius: 3 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
                     <span className="tag" style={{ background: `${vs.color}22`, color: vs.color, border: `1px solid ${vs.color}44` }}>{h.id}</span>
-                    <span style={{ fontSize: 13, color: vs.color }}>{vs.icon}</span>
-                    <span style={{ fontSize: 10, color: vs.color, letterSpacing: 1, opacity: 0.8 }}>{h.status.toUpperCase()}</span>
+                    <span style={{ fontSize: 14, color: vs.color }}>{vs.icon}</span>
+                    <span style={{ fontSize: 12, color: vs.color, letterSpacing: 1, opacity: 0.8 }}>{h.status.toUpperCase()}</span>
                   </div>
-                  <div style={{ fontSize: 12, color: "#7799bb", lineHeight: 1.7 }}>{h.text}</div>
+                  <div style={{ fontSize: 13, color: "#7799bb", lineHeight: 1.7 }}>{h.text}</div>
                   {h.evidence.length > 0 && (
                     <div style={{ marginTop: 7, borderTop: "1px solid #1a2a3a", paddingTop: 7 }}>
                       {h.evidence.map((ev, i) => (
-                        <div key={i} style={{ fontSize: 11, color: "#4a6677", lineHeight: 1.6, marginBottom: 4 }}>
+                        <div key={i} style={{ fontSize: 12, color: "#4a6677", lineHeight: 1.6, marginBottom: 4 }}>
                           <span style={{ color: "#3a5a6a" }}>krok {ev.step} [{ev.action}]</span> {ev.reasoning}
                           {ev.key_stats && Object.keys(ev.key_stats).length > 0 && (
                             <div style={{ marginTop: 2, paddingLeft: 8, borderLeft: "2px solid #1a3a2a" }}>
                               {Object.entries(ev.key_stats).map(([gene, s]) => (
-                                <span key={gene} style={{ display: "inline-block", marginRight: 10, color: "#3a6a4a", fontSize: 10 }}>
+                                <span key={gene} style={{ display: "inline-block", marginRight: 10, color: "#3a6a4a", fontSize: 11 }}>
                                   <b style={{ color: "#4a8a5a" }}>{gene}</b>{": "}
                                   {Object.entries(s).filter(([, v]) => v != null).map(([k, v]) =>
                                     `${k}=${typeof v === "number" ? (Math.abs(v) < 0.001 ? v.toExponential(2) : v.toPrecision(3)) : Array.isArray(v) ? v.join(",") : v}`
