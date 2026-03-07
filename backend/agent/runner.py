@@ -90,7 +90,7 @@ async def run_agent_loop(
         try:
             async with client.messages.stream(
                 model="claude-sonnet-4-20250514",
-                max_tokens=8192,
+                max_tokens=16000,
                 system=system_prompt,
                 messages=messages,
             ) as stream:

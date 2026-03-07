@@ -64,6 +64,10 @@ Hypotheses must be specific and falsifiable.
 FORMAT (strict JSON, nothing else):
 {{"thought":"...","action":"tool_name","params":{{...}},"hypothesis_action":{{"type":"propose","text":"...","genes":["GENE1"]}} or {{"type":"evaluate","hypothesis_id":"H1","verdict":"confirmed","reasoning":"..."}} or null}}
 
+IMPORTANT:
+- "action" must be a tool name (e.g. differential_expression, execute_code, DONE) — NEVER "hypothesis_action"
+- Keep "thought" concise (≤80 words) to avoid truncation
+
 STRATEGY:
 1. Hypotheses S1..Sn are already loaded from pre-analysis (PENDING) — start by investigating them with tools
 2. cross_dataset_de / invariant_axis → test hypothesis, then evaluate it
