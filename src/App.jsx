@@ -124,6 +124,7 @@ export default function App() {
             if (entry.type === "hypothesis_propose") setHypotheses(prev => [...prev, entry.hypothesis]);
             if (entry.type === "hypothesis_eval")    setHypotheses(prev => prev.map(h => h.id === entry.hypothesis.id ? entry.hypothesis : h));
             addLog(entry);
+            await new Promise(r => setTimeout(r, 80));
           } catch { /* ignore malformed SSE lines */ }
         }
       }

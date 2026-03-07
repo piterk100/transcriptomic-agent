@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import re
@@ -61,7 +62,7 @@ async def run_agent_loop(
         try:
             response = await client.messages.create(
                 model="claude-sonnet-4-20250514",
-                max_tokens=2500,
+                max_tokens=8192,
                 system=system_prompt,
                 messages=messages,
             )
@@ -105,6 +106,7 @@ async def run_agent_loop(
             return
 
         yield {"type": "thought", "text": thought}
+        await asyncio.sleep(0)  # flush thought before running tool
 
         result = None
         if action == "execute_code":
