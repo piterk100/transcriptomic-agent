@@ -8,6 +8,32 @@ import anthropic
 
 logger = logging.getLogger(__name__)
 
+
+def _repair_json(s: str) -> str:
+    """Replace literal control characters inside JSON strings with proper escape sequences."""
+    result = []
+    in_string = False
+    escape = False
+    for char in s:
+        if escape:
+            result.append(char)
+            escape = False
+        elif char == "\\" and in_string:
+            result.append(char)
+            escape = True
+        elif char == '"':
+            result.append(char)
+            in_string = not in_string
+        elif in_string and char == "\n":
+            result.append("\\n")
+        elif in_string and char == "\r":
+            result.append("\\r")
+        elif in_string and char == "\t":
+            result.append("\\t")
+        else:
+            result.append(char)
+    return "".join(result)
+
 from ..agent.system_prompt import build_system_prompt
 from ..agent.seeder import generate_seeds, extract_evidence_stats
 from ..tools.registry import TOOLS, CROSS_TOOL_NAMES, summarize_result
@@ -77,7 +103,7 @@ async def run_agent_loop(
 
         m = re.search(r"\{[\s\S]*\}", raw)
         try:
-            dec = json.loads(m.group(0) if m else raw)
+            dec = json.loads(_repair_json(m.group(0) if m else raw))
         except json.JSONDecodeError:
             logger.error("JSON parse error at step %d: %s", step_num, raw[:200])
             yield {"type": "error", "text": f"JSON parse error: {raw[:200]}"}
