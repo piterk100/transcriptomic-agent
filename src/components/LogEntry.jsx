@@ -42,17 +42,23 @@ export default function LogEntry({ entry }) {
   const ts = TYPE_STYLES[entry.type] || { c: "#1e3a22", icon: "·" };
   const ac = ACTION_COLORS[entry.action] || "#4a7a5a";
 
+  const isStep = entry.type === "thinking";
+
   return (
-    <div className="ent" style={{ marginBottom: 12, borderLeft: `3px solid ${ts.c}`, paddingLeft: 14 }}>
+    <div className="ent" style={{ marginBottom: isStep ? 20 : 12, marginTop: isStep ? 16 : 0, borderLeft: isStep ? "none" : `3px solid ${ts.c}`, paddingLeft: isStep ? 0 : 14 }}>
       <div
         style={{ display: "flex", alignItems: "flex-start", gap: 9, cursor: entry.type === "result" ? "pointer" : "default" }}
         onClick={() => entry.type === "result" && setExpanded(e => !e)}
       >
-        <span style={{ color: ts.c, fontSize: 15, marginTop: 2, flexShrink: 0 }}>{ts.icon}</span>
+        {!isStep && <span style={{ color: ts.c, fontSize: 15, marginTop: 2, flexShrink: 0 }}>{ts.icon}</span>}
         <div style={{ flex: 1, minWidth: 0 }}>
 
           {entry.type === "thinking" && (
-            <span style={{ fontSize: 13, color: "#2a5a3a" }}>{entry.text}</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ flex: 1, height: 1, background: "#1a3a22" }} />
+              <span style={{ fontSize: 12, color: "#2a6a3a", letterSpacing: 2, whiteSpace: "nowrap" }}>{entry.text.replace("Agent thinking... ", "").toUpperCase()}</span>
+              <div style={{ flex: 1, height: 1, background: "#1a3a22" }} />
+            </div>
           )}
 
           {entry.type === "thought" && (
