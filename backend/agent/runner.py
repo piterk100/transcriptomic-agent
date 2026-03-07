@@ -67,7 +67,7 @@ async def run_agent_loop(
     for s in seeds:
         yield {"type": "hypothesis_propose", "hypothesis": dict(s)}
 
-    for i in range(max_steps):
+    for i in range(max_steps + 1):
         step_num = i + 1
 
         discovery_summary = (
