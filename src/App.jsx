@@ -48,6 +48,7 @@ export default function App() {
   const [step,          setStep]          = useState(0);
   const [maxSteps,      setMaxSteps]      = useState(15);
   const [currentStatus, setCurrentStatus] = useState("");
+  const [streamingText, setStreamingText] = useState("");
   const logEnd   = useRef(null);
   const abortRef = useRef(null);
 
@@ -84,7 +85,7 @@ export default function App() {
 
   const runAgent = async () => {
     if (!loaded.length) return;
-    setPhase("running"); setLog([]); setStep(0); setHypotheses([]); setCurrentStatus("Running pre-analysis...");
+    setPhase("running"); setLog([]); setStep(0); setHypotheses([]); setCurrentStatus("Running pre-analysis..."); setStreamingText("");
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -120,11 +121,12 @@ export default function App() {
           try {
             const entry = JSON.parse(line.slice(6));
             if (entry.type === "stream_end") { reader.cancel(); break; }
-            if (entry.type === "thinking")          { setStep(++currentStep); setCurrentStatus(entry.text); continue; }
+            if (entry.type === "thinking")        { setStep(++currentStep); setCurrentStatus(entry.text); setStreamingText(""); continue; }
+            if (entry.type === "thought_stream")  { setStreamingText(prev => prev + entry.delta); continue; }
+            if (entry.type === "thought")         { setStreamingText(""); }
             if (entry.type === "hypothesis_propose") setHypotheses(prev => [...prev, entry.hypothesis]);
             if (entry.type === "hypothesis_eval")    setHypotheses(prev => prev.map(h => h.id === entry.hypothesis.id ? entry.hypothesis : h));
             addLog(entry);
-            await new Promise(r => setTimeout(r, 80));
           } catch { /* ignore malformed SSE lines */ }
         }
       }
@@ -132,6 +134,7 @@ export default function App() {
       if (e.name !== "AbortError") addLog({ type: "error", text: `Stream: ${e.message}` });
     }
     setCurrentStatus("");
+    setStreamingText("");
     setPhase("done");
   };
 
@@ -217,6 +220,16 @@ export default function App() {
               </div>
             )}
             {log.map(e => <LogEntry key={e.id} entry={e} />)}
+            {streamingText && (
+              <div className="ent" style={{ marginBottom: 12, borderLeft: "3px solid #224a2a", paddingLeft: 14 }}>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
+                  <span style={{ color: "#224a2a", fontSize: 15, marginTop: 2, flexShrink: 0 }}>◆</span>
+                  <div style={{ fontSize: 14, color: "#5aaa7a", lineHeight: 1.7 }}>
+                    {streamingText}<span className="blink">▋</span>
+                  </div>
+                </div>
+              </div>
+            )}
             <div ref={logEnd} />
           </div>
         </div>

@@ -59,14 +59,17 @@ async def run_agent_loop(
 
         yield {"type": "thinking", "text": f"Agent thinking... ({step_num}/{max_steps})"}
 
+        raw = ""
         try:
-            response = await client.messages.create(
+            async with client.messages.stream(
                 model="claude-sonnet-4-20250514",
                 max_tokens=8192,
                 system=system_prompt,
                 messages=messages,
-            )
-            raw = response.content[0].text if response.content else ""
+            ) as stream:
+                async for text in stream.text_stream:
+                    raw += text
+                    yield {"type": "thought_stream", "delta": text}
         except Exception as e:
             logger.error("API error at step %d: %s", step_num, e, exc_info=True)
             yield {"type": "error", "text": f"API error: {e}"}
