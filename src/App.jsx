@@ -122,7 +122,7 @@ export default function App() {
             const entry = JSON.parse(line.slice(6));
             if (entry.type === "stream_end") { reader.cancel(); break; }
             if (entry.type === "thinking")        { setStep(++currentStep); setCurrentStatus(entry.text); setStreamingText(""); addLog(entry); continue; }
-            if (entry.type === "thought_stream")  { setStreamingText(prev => prev + entry.delta); continue; }
+            if (entry.type === "thought_stream")  { setStreamingText(prev => prev + entry.delta); await new Promise(r => setTimeout(r, 0)); continue; }
             if (entry.type === "thought")         { setStreamingText(""); }
             if (entry.type === "hypothesis_propose") setHypotheses(prev => [...prev, entry.hypothesis]);
             if (entry.type === "hypothesis_eval")    setHypotheses(prev => prev.map(h => h.id === entry.hypothesis.id ? entry.hypothesis : h));

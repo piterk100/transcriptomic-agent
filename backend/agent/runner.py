@@ -93,9 +93,18 @@ async def run_agent_loop(
                 system=system_prompt,
                 messages=messages,
             ) as stream:
+                chunk_buf = ""
+                last_flush = asyncio.get_event_loop().time()
                 async for text in stream.text_stream:
                     raw += text
-                    yield {"type": "thought_stream", "delta": text}
+                    chunk_buf += text
+                    now = asyncio.get_event_loop().time()
+                    if len(chunk_buf) >= 40 or (now - last_flush) >= 0.12:
+                        yield {"type": "thought_stream", "delta": chunk_buf}
+                        chunk_buf = ""
+                        last_flush = now
+                if chunk_buf:
+                    yield {"type": "thought_stream", "delta": chunk_buf}
         except Exception as e:
             logger.error("API error at step %d: %s", step_num, e, exc_info=True)
             yield {"type": "error", "text": f"API error: {e}"}
