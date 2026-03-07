@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { flushSync } from "react-dom";
 import DatasetSlot from "./components/DatasetSlot";
 import LogEntry from "./components/LogEntry";
 
@@ -122,11 +123,12 @@ export default function App() {
             const entry = JSON.parse(line.slice(6));
             if (entry.type === "stream_end") { reader.cancel(); break; }
             if (entry.type === "thinking")        { setStep(++currentStep); setCurrentStatus(entry.text); setStreamingText(""); addLog(entry); continue; }
-            if (entry.type === "thought_stream")  { setStreamingText(prev => prev + entry.delta); await new Promise(r => setTimeout(r, 0)); continue; }
-            if (entry.type === "thought")         { setStreamingText(""); }
+            if (entry.type === "thought_stream")  { flushSync(() => setStreamingText(prev => prev + entry.delta)); continue; }
+            if (entry.type === "thought")         { flushSync(() => setStreamingText("")); }
             if (entry.type === "hypothesis_propose") setHypotheses(prev => [...prev, entry.hypothesis]);
             if (entry.type === "hypothesis_eval")    setHypotheses(prev => prev.map(h => h.id === entry.hypothesis.id ? entry.hypothesis : h));
             addLog(entry);
+            await new Promise(r => setTimeout(r, 80));
           } catch { /* ignore malformed SSE lines */ }
         }
       }
