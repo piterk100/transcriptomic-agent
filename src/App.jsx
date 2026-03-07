@@ -93,7 +93,7 @@ export default function App() {
     let currentStep = 0;
 
     try {
-      const res = await fetch("/api/run", {
+      const res = await fetch("http://localhost:8000/api/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ dataset_ids: loaded.map(d => d.id), group_cols: groupMap, max_steps: maxSteps }),
