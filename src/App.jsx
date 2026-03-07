@@ -11,6 +11,8 @@ const STYLES = `
   @keyframes si{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
   @keyframes dots{0%,100%{content:''}33%{content:'.'}66%{content:'..'}99%{content:'...'}}
   .thinking-indicator::after{content:'';animation:dots 1.2s steps(1) infinite}
+  @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+  .spinner{width:28px;height:28px;border:2px solid #1a3a22;border-top-color:#3dcc7a;border-radius:50%;animation:spin 0.9s linear infinite}
   .ent{animation:si .2s ease}
   .blink{animation:pulse 1.5s infinite}
   .btn{background:transparent;border:1px solid #2a5a3a;color:#3dcc7a;font-family:inherit;font-size:14px;padding:9px 16px;cursor:pointer;letter-spacing:2px;text-transform:uppercase;transition:all .15s;width:100%}
@@ -140,7 +142,7 @@ export default function App() {
         <div style={{ width: 8, height: 8, borderRadius: "50%", background: phase === "running" ? "#3dcc7a" : "#223322", boxShadow: phase === "running" ? "0 0 10px #3dcc7a" : "none" }} className={phase === "running" ? "blink" : ""} />
         <span style={{ fontFamily: "'Syne',sans-serif", fontSize: 20, fontWeight: 800, letterSpacing: 3, color: "#3dcc7a" }}>TRANSCRIPTOMIC AGENT</span>
         <span style={{ fontSize: 13, color: "#2a5a3a", letterSpacing: 2 }}>/ MULTI-DATASET · CROSS-COHORT</span>
-        {phase === "running" && <span style={{ marginLeft: "auto", fontSize: 14, color: "#3a7a4a" }}>STEP {step}/{maxSteps}</span>}
+        {phase === "running" && !currentStatus && <span style={{ marginLeft: "auto", fontSize: 14, color: "#3a7a4a" }}>STEP {step}/{maxSteps}</span>}
       </div>
 
       <div style={{ display: "flex", height: "calc(100vh - 58px)" }}>
@@ -185,22 +187,37 @@ export default function App() {
         </div>
 
         {/* LOG PANEL */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "22px 28px" }}>
-          {log.length === 0 && (
-            <div style={{ textAlign: "center", marginTop: 100 }}>
-              <div style={{ fontSize: 36, opacity: .1, marginBottom: 14 }}>⬡</div>
-              <div style={{ fontSize: 16, color: "#2a5a3a" }}>Load datasets and start the agent</div>
-              <div style={{ fontSize: 13, color: "#1a3a22", marginTop: 8 }}>Backend: <code style={{color:"#2a5a3a"}}>uvicorn backend.main:app --reload</code></div>
-            </div>
-          )}
-          {log.map(e => <LogEntry key={e.id} entry={e} />)}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+
+          {/* sticky status bar */}
           {currentStatus && (
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8, padding: "10px 14px", borderLeft: "3px solid #1e3a22", opacity: 0.85 }}>
-              <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#3dcc7a", boxShadow: "0 0 8px #3dcc7a" }} className="blink" />
-              <span className="thinking-indicator" style={{ fontSize: 13, color: "#3a7a4a", letterSpacing: 1 }}>{currentStatus}</span>
+            <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 10, padding: "10px 28px", borderBottom: "1px solid #1a2e1a", background: "#0b0f0b" }}>
+              <div className="spinner" />
+              <span className="thinking-indicator" style={{ fontSize: 13, color: "#3dcc7a", letterSpacing: 1 }}>{currentStatus}</span>
+              {step > 0 && <span style={{ marginLeft: "auto", fontSize: 12, color: "#2a5a3a" }}>STEP {step}/{maxSteps}</span>}
             </div>
           )}
-          <div ref={logEnd} />
+
+          <div style={{ flex: 1, overflowY: "auto", padding: "22px 28px" }}>
+            {log.length === 0 && !currentStatus && (
+              <div style={{ textAlign: "center", marginTop: 100 }}>
+                <div style={{ fontSize: 36, opacity: .1, marginBottom: 14 }}>⬡</div>
+                <div style={{ fontSize: 16, color: "#2a5a3a" }}>Load datasets and start the agent</div>
+                <div style={{ fontSize: 13, color: "#1a3a22", marginTop: 8 }}>Backend: <code style={{color:"#2a5a3a"}}>uvicorn backend.main:app --reload</code></div>
+              </div>
+            )}
+            {log.length === 0 && currentStatus && (
+              <div style={{ textAlign: "center", marginTop: 120 }}>
+                <div style={{ display: "flex", justifyContent: "center", marginBottom: 24 }}>
+                  <div style={{ width: 48, height: 48, border: "2px solid #1a3a22", borderTopColor: "#3dcc7a", borderRadius: "50%", animation: "spin 0.9s linear infinite" }} />
+                </div>
+                <div style={{ fontSize: 15, color: "#3a7a4a", letterSpacing: 1 }}>{currentStatus}</div>
+                <div style={{ fontSize: 12, color: "#1a3a22", marginTop: 8 }}>This may take a few seconds...</div>
+              </div>
+            )}
+            {log.map(e => <LogEntry key={e.id} entry={e} />)}
+            <div ref={logEnd} />
+          </div>
         </div>
 
         {/* HYPOTHESIS PANEL */}
