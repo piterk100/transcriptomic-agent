@@ -55,7 +55,8 @@ async def run_agent_loop(
     common_genes = all_genes[0].intersection(*all_genes[1:]) if len(all_genes) > 1 else all_genes[0] if all_genes else set()
 
     # ── Pre-analysis seeding ──────────────────────────────────────────────────
-    seeds, seed_summary = generate_seeds(datasets)
+    loop = asyncio.get_event_loop()
+    seeds, seed_summary = await loop.run_in_executor(None, generate_seeds, datasets)
     system_prompt = build_system_prompt(datasets, len(common_genes), seed_summary=seed_summary)
     messages = []
     discoveries = []
@@ -146,17 +147,19 @@ async def run_agent_loop(
         yield {"type": "thought", "text": thought}
         await asyncio.sleep(0)  # flush thought before running tool
 
+        loop = asyncio.get_event_loop()
         result = None
         if action == "execute_code":
             code = params.get("code", "")
             yield {"type": "code", "code": code}
-            result = execute_sandbox(code, datasets)
+            result = await loop.run_in_executor(None, execute_sandbox, code, datasets)
             summary = f"ERROR: {result['error']}" if isinstance(result, dict) and result.get("error") else f"Code executed: {str(result)[:80]}"
             discoveries.append({"action": action, "params": params, "summary": summary, "result": result})
             yield {"type": "result", "action": action, "params": params, "result": result, "summary": summary, "isCross": False, "isDynamic": True}
         elif action in TOOLS:
             try:
-                result = TOOLS[action](datasets, **params)
+                tool_fn = TOOLS[action]
+                result = await loop.run_in_executor(None, lambda: tool_fn(datasets, **params))
                 summary = summarize_result(action, result)
                 discoveries.append({"action": action, "params": params, "summary": summary, "result": result})
                 yield {
