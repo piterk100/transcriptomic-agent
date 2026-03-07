@@ -61,7 +61,7 @@ async def run_agent_loop(
         try:
             response = await client.messages.create(
                 model="claude-sonnet-4-20250514",
-                max_tokens=1200,
+                max_tokens=2500,
                 system=system_prompt,
                 messages=messages,
             )
