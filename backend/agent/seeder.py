@@ -1,5 +1,5 @@
 """
-Pre-analysis seeder: lightweight statistical analysis run before the agent loop to
+Pre-analysis seeder: proper statistical pre-analysis run before the agent loop to
 generate data-driven seed hypotheses and provide structured evidence extraction.
 IDs are S1, S2, ... (distinct from agent-proposed H1, H2, ...).
 """
@@ -8,99 +8,190 @@ from __future__ import annotations
 import itertools
 
 import numpy as np
+import pandas as pd
+from scipy.stats import mannwhitneyu as mwu
+from statsmodels.stats.multitest import multipletests
 
-from ..tools.single import top_variable_genes
 from ..tools.cross import cross_dataset_de
 
 
 def generate_seeds(datasets: list) -> tuple[list[dict], str, dict]:
     """
-    Run quick pre-analysis and return (seed_hypotheses, seed_summary_text, seed_data).
+    Run genome-wide MWU + BH pre-analysis per dataset/group-pair and return
+    (seed_hypotheses, seed_summary_text, seed_data).
 
     seed_hypotheses: list of hypothesis dicts with status="pending", seeded_by="auto".
     seed_summary_text: compact multi-line string injected into the system prompt.
-    seed_data: full result data for the report (top variable genes + cross-dataset DE tables).
+    seed_data: full result tables for the report.
     """
     seeds: list[dict] = []
     summary_lines: list[str] = []
-    seed_n = 0
-    seed_data: dict = {"top_variable": [], "cross_de": []}
+    seed_id = 1
+    seed_data: dict = {"per_dataset_de": [], "cross_de": []}
+
+    # Convert list → dict keyed by dataset name for iteration
+    ds_dict = {ds["name"]: ds for ds in datasets}
 
     try:
-        # ── 1. Top variable genes per dataset ────────────────────────────────
-        for ds in datasets:
-            try:
-                topv = top_variable_genes([ds], datasetName=ds["name"], n=10)
-                gene_names = [g["gene"] for g in topv[:5]]
-                if gene_names:
+        # ── 1. Per-dataset differential expression (MWU + BH) ────────────────
+        for ds_name, ds in ds_dict.items():
+            expr = ds["expr"]
+            meta = ds["meta"]
+            gc = ds["group_col"]
+            if not gc or gc not in meta.columns:
+                continue
+            groups = meta[gc].dropna().unique().tolist()
+
+            for group_a, group_b in itertools.combinations(groups, 2):
+                sA = meta[meta[gc] == group_a].index.intersection(expr.columns)
+                sB = meta[meta[gc] == group_b].index.intersection(expr.columns)
+                if len(sA) < 3 or len(sB) < 3:
                     summary_lines.append(
-                        f"  {ds['name']} — top variable: {', '.join(gene_names)}"
+                        f"  {ds_name} — {group_a} vs {group_b}: skipped (n<3)"
                     )
-                seed_data["top_variable"].append({
-                    "dataset": ds["name"],
-                    "genes": topv[:10],
-                })
-            except Exception:
-                pass
-
-        # ── 2. Cross-dataset DE for group pairs present in >= 2 datasets ─────
-        group_counts: dict[str, int] = {}
-        for ds in datasets:
-            for g in ds.get("groups", []):
-                group_counts[g] = group_counts.get(g, 0) + 1
-
-        multi_groups = [g for g, c in group_counts.items() if c >= 2]
-        candidates: list[dict] = []
-
-        for gA, gB in itertools.combinations(multi_groups, 2):
-            try:
-                result = cross_dataset_de(datasets, groupA=gA, groupB=gB, topN=5)
-                if "error" in result:
                     continue
-                seed_data["cross_de"].append({
-                    "groupA": gA,
-                    "groupB": gB,
-                    "top_up": result.get("top_consistent_up", [])[:5],
-                    "top_down": result.get("top_consistent_down", [])[:5],
-                    "n_tested": result.get("n_genes_tested"),
-                    "interpretation": result.get("interpretation", ""),
+
+                # MWU per gene
+                results = []
+                for gene in expr.index:
+                    a_vals = expr.loc[gene, sA].values.astype(float)
+                    b_vals = expr.loc[gene, sB].values.astype(float)
+                    if np.std(a_vals) == 0 and np.std(b_vals) == 0:
+                        continue
+                    try:
+                        _, p = mwu(a_vals, b_vals)
+                    except Exception:
+                        continue
+                    logfc = float(a_vals.mean() - b_vals.mean())
+                    results.append({"gene": gene, "logFC": logfc, "p": p})
+
+                if not results:
+                    continue
+
+                df = pd.DataFrame(results)
+                _, adj_p, _, _ = multipletests(df["p"].values, method="fdr_bh")
+                df["adj_p"] = adj_p
+                sig = df[(df["adj_p"] < 0.05) & (df["logFC"].abs() > 0.5)].sort_values("adj_p")
+
+                n_sig = len(sig)
+                top_up   = sig[sig["logFC"] > 0].head(5)["gene"].tolist()
+                top_down = sig[sig["logFC"] < 0].head(5)["gene"].tolist()
+                top_genes = top_up + top_down
+
+                summary_lines.append(
+                    f"  {ds_name} — {group_a} vs {group_b}: "
+                    f"{n_sig} DE genes (adj_p<0.05, |logFC|>0.5)"
+                    + (f", top UP: {', '.join(top_up)}" if top_up else "")
+                    + (f", top DOWN: {', '.join(top_down)}" if top_down else "")
+                )
+
+                # Store full table for report
+                seed_data["per_dataset_de"].append({
+                    "dataset": ds_name,
+                    "groupA": group_a,
+                    "groupB": group_b,
+                    "n_sig": n_sig,
+                    "top_up": sig[sig["logFC"] > 0].head(10)[["gene", "logFC", "adj_p"]].to_dict("records"),
+                    "top_down": sig[sig["logFC"] < 0].head(10)[["gene", "logFC", "adj_p"]].to_dict("records"),
                 })
-                for entry in result.get("top_consistent_up", [])[:3]:
-                    candidates.append({**entry, "_groupA": gA, "_groupB": gB, "_dir": "UP"})
-                for entry in result.get("top_consistent_down", [])[:3]:
-                    candidates.append({**entry, "_groupA": gA, "_groupB": gB, "_dir": "DOWN"})
-            except Exception:
-                pass
 
-        # Sort by fisher_adj_p (ascending), take top 6
-        candidates.sort(key=lambda x: x.get("fisher_adj_p", 1.0))
-        for entry in candidates[:6]:
-            seed_n += 1
-            gene = entry["gene"]
-            gA, gB = entry["_groupA"], entry["_groupB"]
-            direction_str = "overexpressed" if entry["_dir"] == "UP" else "underexpressed"
-            n_ds = entry.get("n_datasets", len(datasets))
-            adj_p = entry.get("fisher_adj_p")
-            lfc = entry.get("avg_abs_logFC")
+                if top_genes:
+                    description = (
+                        f"{n_sig} genes DE between {group_a} and {group_b} "
+                        f"in {ds_name} (MWU + BH, adj_p<0.05, |logFC|>0.5). "
+                        f"Top UP: {', '.join(top_up) or 'none'}. "
+                        f"Top DOWN: {', '.join(top_down) or 'none'}."
+                    )
+                    seeds.append({
+                        "id": f"S{seed_id}",
+                        "text": description,
+                        "status": "pending",
+                        "evidence": [],
+                        "proposed_at": 0,
+                        "seeded_by": "auto",
+                        "genes": top_genes,
+                    })
+                    seed_id += 1
+                else:
+                    # No DE — seed a "no signal" hypothesis worth investigating
+                    top_var = expr.var(axis=1).sort_values(ascending=False).head(5).index.tolist()
+                    summary_lines.append(
+                        f"  {ds_name} — {group_a} vs {group_b}: "
+                        f"no DE found, top variable: {', '.join(top_var)}"
+                    )
+                    description = (
+                        f"No significant DE between {group_a} and {group_b} in {ds_name} "
+                        f"despite top variable genes: {', '.join(top_var)}. "
+                        f"Investigate heterogeneity, subgroups, or effect sizes."
+                    )
+                    seeds.append({
+                        "id": f"S{seed_id}",
+                        "text": description,
+                        "status": "pending",
+                        "evidence": [],
+                        "proposed_at": 0,
+                        "seeded_by": "auto",
+                        "genes": top_var,
+                    })
+                    seed_id += 1
 
-            text = (
-                f"{gene} is consistently {direction_str} in {gA} vs {gB} "
-                f"across all {n_ds} datasets"
-                + (f" (avg_|logFC|={lfc}, fisher_adj_p={adj_p})" if lfc and adj_p else "")
-            )
-            seeds.append({
-                "id": f"S{seed_n}",
-                "text": text,
-                "status": "pending",
-                "evidence": [],
-                "proposed_at": 0,
-                "seeded_by": "auto",
-                "genes": [gene],
-            })
-            summary_lines.append(
-                f"  S{seed_n}: {gene} {entry['_dir']} {gA}↑vs↓{gB} "
-                f"| fisher_adj_p={adj_p} | n_datasets={n_ds}"
-            )
+        # ── 2. Cross-dataset DE if >= 2 datasets ─────────────────────────────
+        if len(datasets) >= 2:
+            all_groups: set[str] = set()
+            for ds in datasets:
+                all_groups.update(ds["meta"][ds["group_col"]].dropna().unique())
+
+            for group_a, group_b in itertools.combinations(all_groups, 2):
+                n_with_pair = sum(
+                    1 for ds in datasets
+                    if group_a in ds["meta"][ds["group_col"]].values
+                    and group_b in ds["meta"][ds["group_col"]].values
+                )
+                if n_with_pair < 2:
+                    continue
+                try:
+                    result = cross_dataset_de(datasets, groupA=group_a, groupB=group_b, topN=10)
+                    if "error" in result:
+                        continue
+                    top_up_cross   = [g["gene"] for g in result.get("top_consistent_up", [])[:3]]
+                    top_down_cross = [g["gene"] for g in result.get("top_consistent_down", [])[:3]]
+                    top_consistent = top_up_cross + top_down_cross
+                    n_consistent   = result.get("n_genes_tested", len(top_consistent))
+
+                    seed_data["cross_de"].append({
+                        "groupA": group_a,
+                        "groupB": group_b,
+                        "top_up": result.get("top_consistent_up", [])[:5],
+                        "top_down": result.get("top_consistent_down", [])[:5],
+                        "n_tested": result.get("n_genes_tested"),
+                        "interpretation": result.get("interpretation", ""),
+                    })
+
+                    summary_lines.append(
+                        f"  CROSS — {group_a} vs {group_b}: "
+                        f"{n_with_pair} datasets, consistent genes: "
+                        + (f"UP {', '.join(top_up_cross)}" if top_up_cross else "")
+                        + (f" DOWN {', '.join(top_down_cross)}" if top_down_cross else "")
+                    )
+                    if top_consistent:
+                        description = (
+                            f"{len(top_consistent)} genes consistently DE across "
+                            f"{n_with_pair} datasets ({group_a} vs {group_b}). "
+                            f"Top: {', '.join(top_consistent)}. "
+                            f"Investigate replicability and biological significance."
+                        )
+                        seeds.append({
+                            "id": f"S{seed_id}",
+                            "text": description,
+                            "status": "pending",
+                            "evidence": [],
+                            "proposed_at": 0,
+                            "seeded_by": "auto_cross",
+                            "genes": top_consistent,
+                        })
+                        seed_id += 1
+                except Exception:
+                    pass
 
     except Exception:
         pass  # graceful degradation: agent starts without seeds
@@ -195,7 +286,6 @@ def extract_evidence_stats(action: str, result: dict, genes: list[str]) -> dict:
 
     elif action == "cross_dataset_rewiring":
         pair = result.get("gene_pair", "")
-        # Include if either gene in pair matches
         if any(g.upper() in gene_set for g in pair.replace("—", " ").replace("–", " ").split()):
             stats["rewiring"] = {
                 "max_r":              result.get("max_r"),

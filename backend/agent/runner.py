@@ -93,16 +93,25 @@ def _write_report(datasets: list, seed_summary: str, seed_data: dict, steps: lis
     # Pre-analysis
     lines.append("\n---\n## Pre-analysis\n")
 
-    # Top variable genes
-    if seed_data.get("top_variable"):
-        lines.append("### Top Variable Genes\n")
-        for entry in seed_data["top_variable"]:
-            lines.append(f"**{entry['dataset']}**\n")
-            lines.append("| Gene | Variance |")
-            lines.append("|------|----------|")
-            for g in entry["genes"]:
-                lines.append(f"| {g.get('gene', '')} | {g.get('variance', ''):.4f} |")
-            lines.append("")
+    # Per-dataset DE results (MWU + BH)
+    if seed_data.get("per_dataset_de"):
+        lines.append("### Per-Dataset Differential Expression (MWU + BH)\n")
+        for entry in seed_data["per_dataset_de"]:
+            lines.append(f"**{entry['dataset']} — {entry['groupA']} vs {entry['groupB']}** ({entry['n_sig']} DE genes)\n")
+            if entry.get("top_up"):
+                lines.append(f"_Top upregulated in {entry['groupA']}:_")
+                lines.append("| Gene | logFC | adj_p |")
+                lines.append("|------|-------|-------|")
+                for g in entry["top_up"]:
+                    lines.append(f"| {g.get('gene','')} | {round(g.get('logFC',0),3)} | {round(g.get('adj_p',1),4)} |")
+                lines.append("")
+            if entry.get("top_down"):
+                lines.append(f"_Top downregulated in {entry['groupA']}:_")
+                lines.append("| Gene | logFC | adj_p |")
+                lines.append("|------|-------|-------|")
+                for g in entry["top_down"]:
+                    lines.append(f"| {g.get('gene','')} | {round(g.get('logFC',0),3)} | {round(g.get('adj_p',1),4)} |")
+                lines.append("")
 
     # Cross-dataset DE results
     if seed_data.get("cross_de"):
@@ -110,14 +119,14 @@ def _write_report(datasets: list, seed_summary: str, seed_data: dict, steps: lis
         for de in seed_data["cross_de"]:
             lines.append(f"**{de['groupA']} vs {de['groupB']}** (genes tested: {de.get('n_tested', 'n/a')})\n")
             if de.get("top_up"):
-                lines.append("_Consistently upregulated in {gA}:_".format(gA=de["groupA"]))
+                lines.append(f"_Consistently upregulated in {de['groupA']}:_")
                 lines.append("| Gene | avg|logFC| | fisher_adj_p | n_datasets |")
                 lines.append("|------|-----------|-------------|------------|")
                 for g in de["top_up"]:
                     lines.append(f"| {g.get('gene','')} | {g.get('avg_abs_logFC','')} | {g.get('fisher_adj_p','')} | {g.get('n_datasets','')} |")
                 lines.append("")
             if de.get("top_down"):
-                lines.append("_Consistently downregulated in {gA}:_".format(gA=de["groupA"]))
+                lines.append(f"_Consistently downregulated in {de['groupA']}:_")
                 lines.append("| Gene | avg|logFC| | fisher_adj_p | n_datasets |")
                 lines.append("|------|-----------|-------------|------------|")
                 for g in de["top_down"]:
