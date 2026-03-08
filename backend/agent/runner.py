@@ -76,7 +76,7 @@ from ..tools.sandbox import execute_sandbox
 REPORTS_DIR = "reports"
 
 
-def _write_report(datasets: list, seed_summary: str, steps: list, hypotheses: list, done_text: str) -> str:
+def _write_report(datasets: list, seed_summary: str, seed_data: dict, steps: list, hypotheses: list, done_text: str) -> str:
     """Write a Markdown report of the agent run. Returns the file path."""
     os.makedirs(REPORTS_DIR, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -91,7 +91,43 @@ def _write_report(datasets: list, seed_summary: str, steps: list, hypotheses: li
         lines.append(f"- {ds['name']}: {len(ds['expr'].index)} genes, {len(ds['expr'].columns)} samples, groups: {', '.join(ds['groups'])}")
 
     # Pre-analysis
-    lines.append("\n---\n## Pre-analysis (Seed Hypotheses)\n")
+    lines.append("\n---\n## Pre-analysis\n")
+
+    # Top variable genes
+    if seed_data.get("top_variable"):
+        lines.append("### Top Variable Genes\n")
+        for entry in seed_data["top_variable"]:
+            lines.append(f"**{entry['dataset']}**\n")
+            lines.append("| Gene | Variance |")
+            lines.append("|------|----------|")
+            for g in entry["genes"]:
+                lines.append(f"| {g.get('gene', '')} | {g.get('variance', ''):.4f} |")
+            lines.append("")
+
+    # Cross-dataset DE results
+    if seed_data.get("cross_de"):
+        lines.append("### Cross-Dataset Differential Expression\n")
+        for de in seed_data["cross_de"]:
+            lines.append(f"**{de['groupA']} vs {de['groupB']}** (genes tested: {de.get('n_tested', 'n/a')})\n")
+            if de.get("top_up"):
+                lines.append("_Consistently upregulated in {gA}:_".format(gA=de["groupA"]))
+                lines.append("| Gene | avg|logFC| | fisher_adj_p | n_datasets |")
+                lines.append("|------|-----------|-------------|------------|")
+                for g in de["top_up"]:
+                    lines.append(f"| {g.get('gene','')} | {g.get('avg_abs_logFC','')} | {g.get('fisher_adj_p','')} | {g.get('n_datasets','')} |")
+                lines.append("")
+            if de.get("top_down"):
+                lines.append("_Consistently downregulated in {gA}:_".format(gA=de["groupA"]))
+                lines.append("| Gene | avg|logFC| | fisher_adj_p | n_datasets |")
+                lines.append("|------|-----------|-------------|------------|")
+                for g in de["top_down"]:
+                    lines.append(f"| {g.get('gene','')} | {g.get('avg_abs_logFC','')} | {g.get('fisher_adj_p','')} | {g.get('n_datasets','')} |")
+                lines.append("")
+            if de.get("interpretation"):
+                lines.append(f"_{de['interpretation']}_\n")
+
+    # Seed hypotheses summary
+    lines.append("### Seed Hypotheses Generated\n")
     if seed_summary:
         lines.append(f"```\n{seed_summary}\n```")
     else:
@@ -174,7 +210,7 @@ async def run_agent_loop(
 
     # ── Pre-analysis seeding ──────────────────────────────────────────────────
     loop = asyncio.get_event_loop()
-    seeds, seed_summary = await loop.run_in_executor(None, generate_seeds, datasets)
+    seeds, seed_summary, seed_data = await loop.run_in_executor(None, generate_seeds, datasets)
     system_prompt = build_system_prompt(datasets, len(common_genes), seed_summary=seed_summary)
     messages = []
     discoveries = []
@@ -281,7 +317,7 @@ async def run_agent_loop(
         if action == "DONE":
             yield {"type": "done", "text": thought}
             report_path = await loop.run_in_executor(
-                None, _write_report, datasets, seed_summary, report_steps, hypotheses, thought
+                None, _write_report, datasets, seed_summary, seed_data, report_steps, hypotheses, thought
             )
             yield {"type": "report", "path": report_path}
             return
@@ -376,6 +412,6 @@ async def run_agent_loop(
     done_text = "Agent did not produce a final summary (step budget exhausted)."
     yield {"type": "done", "text": done_text}
     report_path = await loop.run_in_executor(
-        None, _write_report, datasets, seed_summary, report_steps, hypotheses, done_text
+        None, _write_report, datasets, seed_summary, seed_data, report_steps, hypotheses, done_text
     )
     yield {"type": "report", "path": report_path}

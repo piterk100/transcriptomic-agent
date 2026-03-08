@@ -13,16 +13,18 @@ from ..tools.single import top_variable_genes
 from ..tools.cross import cross_dataset_de
 
 
-def generate_seeds(datasets: list) -> tuple[list[dict], str]:
+def generate_seeds(datasets: list) -> tuple[list[dict], str, dict]:
     """
-    Run quick pre-analysis and return (seed_hypotheses, seed_summary_text).
+    Run quick pre-analysis and return (seed_hypotheses, seed_summary_text, seed_data).
 
     seed_hypotheses: list of hypothesis dicts with status="pending", seeded_by="auto".
     seed_summary_text: compact multi-line string injected into the system prompt.
+    seed_data: full result data for the report (top variable genes + cross-dataset DE tables).
     """
     seeds: list[dict] = []
     summary_lines: list[str] = []
     seed_n = 0
+    seed_data: dict = {"top_variable": [], "cross_de": []}
 
     try:
         # ── 1. Top variable genes per dataset ────────────────────────────────
@@ -34,6 +36,10 @@ def generate_seeds(datasets: list) -> tuple[list[dict], str]:
                     summary_lines.append(
                         f"  {ds['name']} — top variable: {', '.join(gene_names)}"
                     )
+                seed_data["top_variable"].append({
+                    "dataset": ds["name"],
+                    "genes": topv[:10],
+                })
             except Exception:
                 pass
 
@@ -51,6 +57,14 @@ def generate_seeds(datasets: list) -> tuple[list[dict], str]:
                 result = cross_dataset_de(datasets, groupA=gA, groupB=gB, topN=5)
                 if "error" in result:
                     continue
+                seed_data["cross_de"].append({
+                    "groupA": gA,
+                    "groupB": gB,
+                    "top_up": result.get("top_consistent_up", [])[:5],
+                    "top_down": result.get("top_consistent_down", [])[:5],
+                    "n_tested": result.get("n_genes_tested"),
+                    "interpretation": result.get("interpretation", ""),
+                })
                 for entry in result.get("top_consistent_up", [])[:3]:
                     candidates.append({**entry, "_groupA": gA, "_groupB": gB, "_dir": "UP"})
                 for entry in result.get("top_consistent_down", [])[:3]:
@@ -95,7 +109,7 @@ def generate_seeds(datasets: list) -> tuple[list[dict], str]:
         "Pre-analysis statistical results:\n" + "\n".join(summary_lines)
         if summary_lines else ""
     )
-    return seeds, seed_summary
+    return seeds, seed_summary, seed_data
 
 
 def extract_evidence_stats(action: str, result: dict, genes: list[str]) -> dict:
