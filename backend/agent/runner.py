@@ -1,7 +1,9 @@
 import asyncio
 import json
 import logging
+import os
 import re
+from datetime import datetime
 from typing import AsyncGenerator
 
 import anthropic
@@ -71,6 +73,76 @@ from ..agent.seeder import generate_seeds, extract_evidence_stats
 from ..tools.registry import TOOLS, CROSS_TOOL_NAMES, summarize_result
 from ..tools.sandbox import execute_sandbox
 
+REPORTS_DIR = "reports"
+
+
+def _write_report(datasets: list, seed_summary: str, steps: list, hypotheses: list, done_text: str) -> str:
+    """Write a Markdown report of the agent run. Returns the file path."""
+    os.makedirs(REPORTS_DIR, exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    ds_names = "_".join(ds["name"].replace(" ", "-") for ds in datasets)
+    path = os.path.join(REPORTS_DIR, f"run_{ts}_{ds_names}.md")
+
+    lines = []
+    lines.append(f"# Transcriptomic Agent Report")
+    lines.append(f"\n**Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}  ")
+    lines.append(f"**Datasets:** {', '.join(ds['name'] for ds in datasets)}  ")
+    for ds in datasets:
+        lines.append(f"- {ds['name']}: {len(ds['expr'].index)} genes, {len(ds['expr'].columns)} samples, groups: {', '.join(ds['groups'])}")
+
+    # Pre-analysis
+    lines.append("\n---\n## Pre-analysis (Seed Hypotheses)\n")
+    if seed_summary:
+        lines.append(f"```\n{seed_summary}\n```")
+    else:
+        lines.append("_No common groups across datasets — no seed hypotheses._")
+
+    # Steps
+    lines.append("\n---\n## Agent Steps\n")
+    for s in steps:
+        lines.append(f"### Step {s['step']}")
+        if s.get("thought"):
+            lines.append(f"\n**Thought:** {s['thought']}\n")
+        if s.get("action"):
+            lines.append(f"**Action:** `{s['action']}`")
+            if s.get("params"):
+                param_str = ", ".join(f"{k}={repr(v)[:60]}" for k, v in s["params"].items() if k != "code")
+                if param_str:
+                    lines.append(f"  Parameters: {param_str}")
+            if s.get("code"):
+                lines.append(f"\n```python\n{s['code']}\n```")
+        if s.get("summary"):
+            lines.append(f"\n**Result:** {s['summary']}\n")
+        if s.get("error"):
+            lines.append(f"\n**Error:** {s['error']}\n")
+        if s.get("hypo_eval"):
+            h = s["hypo_eval"]
+            lines.append(f"\n**Hypothesis {h['id']} → {h['verdict'].upper()}:** {h['reasoning']}\n")
+
+    # Hypotheses
+    lines.append("\n---\n## Hypotheses\n")
+    if hypotheses:
+        for h in hypotheses:
+            status_icon = {"confirmed": "✓", "rejected": "✗", "uncertain": "?", "pending": "○"}.get(h["status"], "○")
+            lines.append(f"### {h['id']} [{status_icon} {h['status'].upper()}]")
+            lines.append(f"\n{h['text']}\n")
+            if h.get("evidence"):
+                for ev in h["evidence"]:
+                    lines.append(f"- Step {ev['step']} [`{ev['action']}`]: {ev['reasoning']}")
+            lines.append("")
+    else:
+        lines.append("_No hypotheses proposed._")
+
+    # Conclusion
+    lines.append("\n---\n## Conclusion\n")
+    lines.append(done_text if done_text else "_Agent did not produce a final summary._")
+
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+
+    logger.info("Report written: %s", path)
+    return path
+
 
 async def run_agent_loop(
     datasets: list,
@@ -94,6 +166,7 @@ async def run_agent_loop(
     discoveries = []
     hypotheses: list[dict] = list(seeds)   # pre-populated with S1, S2, ...
     hypo_counter = 0                        # agent-proposed: H1, H2, ...
+    report_steps: list[dict] = []           # collected for final report
 
     yield {"type": "seed", "text": f"Pre-analysis: {len(seeds)} seed hypotheses generated", "summary": seed_summary}
     for s in seeds:
@@ -172,8 +245,14 @@ async def run_agent_loop(
             hypotheses.append(h)
             yield {"type": "hypothesis_propose", "hypothesis": dict(h)}
 
+        loop = asyncio.get_event_loop()
+
         if action == "DONE":
             yield {"type": "done", "text": thought}
+            report_path = await loop.run_in_executor(
+                None, _write_report, datasets, seed_summary, report_steps, hypotheses, thought
+            )
+            yield {"type": "report", "path": report_path}
             return
 
         # Guard: model sometimes puts "hypothesis_action" in the action field by mistake
@@ -187,7 +266,6 @@ async def run_agent_loop(
             yield {"type": "thought", "text": thought}
         await asyncio.sleep(0)  # flush thought before running tool
 
-        loop = asyncio.get_event_loop()
         result = None
         if action == "execute_code":
             code = params.get("code", "").strip()
@@ -240,6 +318,24 @@ async def run_agent_loop(
                     "hypothesis": dict(h),
                     "reasoning": hypo_action.get("reasoning", ""),
                 }
+
+        # Collect step for report
+        step_record: dict = {"step": step_num, "thought": thought, "action": action, "params": params}
+        if action == "execute_code":
+            step_record["code"] = params.get("code", "")
+        if result is not None:
+            step_record["summary"] = summarize_result(action, result) if action in TOOLS else (
+                f"ERROR: {result.get('error')}" if isinstance(result, dict) and result.get("error") else str(result)[:120]
+            )
+            if isinstance(result, dict) and result.get("error"):
+                step_record["error"] = result["error"]
+        if isinstance(hypo_action, dict) and hypo_action.get("type") == "evaluate":
+            step_record["hypo_eval"] = {
+                "id": hypo_action.get("hypothesis_id", ""),
+                "verdict": hypo_action.get("verdict", "uncertain"),
+                "reasoning": hypo_action.get("reasoning", ""),
+            }
+        report_steps.append(step_record)
 
         messages.append({"role": "assistant", "content": raw})
         result_str = json.dumps(result, default=str)[:2500] if result is not None else "null"
