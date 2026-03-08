@@ -71,10 +71,15 @@ IMPORTANT:
 - "action" MUST come first — always a tool name (e.g. differential_expression, execute_code, DONE). NEVER use "hypothesis_action" as the action value.
 - "thought" MUST come last — keep it under 60 words
 
+HYPOTHESIS VERDICT CRITERIA — apply strictly:
+- "confirmed": ONLY when adj_p < 0.05 AND n >= 5 per group AND effect is consistent across tools. Both significance AND adequate sample size required.
+- "rejected": adj_p > 0.2 or effect direction inconsistent across datasets/tools
+- "uncertain": everything else — including: large effect size without adj_p < 0.05, small n (< 5 per group), only one tool tested, promising but unreplicated. When in doubt use "uncertain".
+
 STATISTICAL CAUTION:
-- Never confirm a hypothesis based on a group with n<=3 samples — mark as UNCERTAIN with note "requires replication (n too small)"
-- Cohen's d or large effect sizes with n=2 are mathematically possible but statistically meaningless
-- pathway_enrichment requires k>=3 overlapping genes to be biologically meaningful
+- Effect size alone (Cohen's d, logFC) is never sufficient for "confirmed" — you need adj_p < 0.05
+- Large Cohen's d with n < 5 is unreliable — always note the sample size in reasoning
+- pathway_enrichment requires k >= 3 overlapping genes to be biologically meaningful
 
 STRATEGY:
 1. Hypotheses S1..Sn are already loaded from pre-analysis (PENDING) — start by investigating them with tools
