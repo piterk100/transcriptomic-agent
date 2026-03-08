@@ -124,7 +124,8 @@ async def run_agent(req: RunRequest):
             ds["groups"] = ds["meta"][chosen_col].dropna().unique().tolist()
         datasets.append(ds)
 
-    effective_max_steps = len(PROTOCOL_STEPS) if req.mode == "protocol" else req.max_steps
+    # hybrid: ~8 protocol + ~4 free + 1 summary = 13 recommended minimum; user controls max_steps
+    effective_max_steps = req.max_steps
     logger.info("Run started: datasets=%s max_steps=%d mode=%s", req.dataset_ids, effective_max_steps, req.mode)
 
     async def generate():

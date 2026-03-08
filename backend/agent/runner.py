@@ -153,16 +153,15 @@ PROTOCOL_STEPS = [
     "Run gene_network_hub (top_n=30, corr_threshold=0.7) for each dataset.",
     "Run cross_dataset_de for all group pairs present in >= 2 datasets. Skip if only one dataset loaded.",
     "Run invariant_axis for the most biologically relevant group pair based on previous findings. Skip if only one dataset loaded.",
-    "Run pathway_enrichment on top 20 genes from cross_dataset_de or invariant_axis. Skip if only one dataset loaded.",
-    "Summarize all findings, evaluate all hypotheses, write conclusion.",
 ]
+N_PROTOCOL_STEPS = len(PROTOCOL_STEPS)
 
 
 async def run_agent_loop(
     datasets: list,
     max_steps: int,
     api_key: str,
-    mode: str = "free",
+    mode: str = "free",  # "free" or "hybrid"
 ) -> AsyncGenerator[dict, None]:
     """
     Async generator — yields log event dicts.
@@ -199,14 +198,18 @@ async def run_agent_loop(
             if hypotheses else ""
         )
 
-        if mode == "protocol":
-            if i < len(PROTOCOL_STEPS):
-                instruction = PROTOCOL_STEPS[i]
-            else:
-                instruction = "Protocol complete. Summarize findings."
-            user_content = f"Step {step_num}/{max_steps + 1}. {discovery_summary}{hypo_summary}\n\nINSTRUCTION: {instruction}"
+        summary_block = f"{discovery_summary}{hypo_summary}"
+        if mode == "hybrid" and step_num <= N_PROTOCOL_STEPS:
+            instruction = PROTOCOL_STEPS[step_num - 1]
+            user_content = f"Step {step_num}/{max_steps + 1}. {summary_block}\n\nPROTOCOL [{step_num}/{N_PROTOCOL_STEPS}]: {instruction}"
+        elif mode == "hybrid" and step_num == N_PROTOCOL_STEPS + 1:
+            user_content = (
+                f"Step {step_num}/{max_steps + 1}. {summary_block}\n\n"
+                "Protocol complete. You have full results above. Explore freely — "
+                "test new hypotheses, look for unexpected signals, use execute_code if needed."
+            )
         else:
-            user_content = f"Step {step_num}/{max_steps + 1}. {discovery_summary}{hypo_summary}\n\nWhat will you investigate?"
+            user_content = f"Step {step_num}/{max_steps + 1}. {summary_block}\n\nWhat will you investigate?"
 
         messages.append({"role": "user", "content": user_content})
 

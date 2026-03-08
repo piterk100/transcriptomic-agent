@@ -185,7 +185,7 @@ export default function App() {
 
             <div className="sec">// MODE</div>
             <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-              {["free", "protocol"].map(m => (
+              {["free", "hybrid"].map(m => (
                 <button key={m} className="btn bsm" onClick={() => setAgentMode(m)}
                   style={{ flex: 1, borderColor: agentMode === m ? "#3dcc7a" : "#2a5a3a", color: agentMode === m ? "#3dcc7a" : "#2a5a3a", background: agentMode === m ? "#0b160f" : "transparent" }}>
                   {m.toUpperCase()}
@@ -194,10 +194,9 @@ export default function App() {
             </div>
 
             <div className="sec">// MAX STEPS</div>
-            <input type="number" value={agentMode === "protocol" ? 10 : maxSteps} min={3} max={30}
+            <input type="number" value={maxSteps} min={3} max={30}
               onChange={e => setMaxSteps(parseInt(e.target.value))}
-              disabled={agentMode === "protocol"}
-              style={{ marginBottom: 12, opacity: agentMode === "protocol" ? 0.4 : 1 }} />
+              style={{ marginBottom: 12 }} />
 
             <button className="btn" style={{ background: phase === "running" ? "#080e0a" : "transparent" }}
               onClick={phase === "running" ? () => abortRef.current?.abort() : runAgent}>
