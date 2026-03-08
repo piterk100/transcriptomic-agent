@@ -186,8 +186,10 @@ async def run_agent_loop(
     for s in seeds:
         yield {"type": "hypothesis_propose", "hypothesis": dict(s)}
 
-    for i in range(max_steps + 1):
+    for i in range(max_steps):
         step_num = i + 1
+        # Show max_steps + 1 to the agent so it doesn't call DONE at the last real step
+        agent_total = max_steps + 1
 
         discovery_summary = (
             "Discoveries:\n" + "\n".join(f"- [{d['action']}] {d['summary']}" for d in discoveries[-8:])
@@ -201,15 +203,15 @@ async def run_agent_loop(
         summary_block = f"{discovery_summary}{hypo_summary}"
         if mode == "hybrid" and step_num <= N_PROTOCOL_STEPS:
             instruction = PROTOCOL_STEPS[step_num - 1]
-            user_content = f"Step {step_num}/{max_steps + 1}. {summary_block}\n\nPROTOCOL [{step_num}/{N_PROTOCOL_STEPS}]: {instruction}"
+            user_content = f"Step {step_num}/{agent_total}. {summary_block}\n\nPROTOCOL [{step_num}/{N_PROTOCOL_STEPS}]: {instruction}"
         elif mode == "hybrid" and step_num == N_PROTOCOL_STEPS + 1:
             user_content = (
-                f"Step {step_num}/{max_steps + 1}. {summary_block}\n\n"
+                f"Step {step_num}/{agent_total}. {summary_block}\n\n"
                 "Protocol complete. You have full results above. Explore freely — "
                 "test new hypotheses, look for unexpected signals, use execute_code if needed."
             )
         else:
-            user_content = f"Step {step_num}/{max_steps + 1}. {summary_block}\n\nWhat will you investigate?"
+            user_content = f"Step {step_num}/{agent_total}. {summary_block}\n\nWhat will you investigate?"
 
         messages.append({"role": "user", "content": user_content})
 
