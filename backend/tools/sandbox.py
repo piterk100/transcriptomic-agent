@@ -1,6 +1,10 @@
+import logging
+
 import numpy as np
 import pandas as pd
 from scipy import stats
+
+logger = logging.getLogger(__name__)
 
 
 def _serialize(v):
@@ -30,33 +34,49 @@ def _serialize(v):
     return str(v)
 
 
+# Keys that are pre-loaded into the exec namespace — not part of agent output
+_BUILTIN_KEYS = frozenset({"datasets", "np", "pd", "stats", "__builtins__"})
+
+
 def execute_sandbox(code: str, datasets: list) -> dict:
     """
     Executes Python code written by the agent.
     Available variables: datasets, np, pd, stats
     Code must set the `result` variable before finishing.
+
+    Uses a single namespace dict for both globals and locals so that
+    variable assignments inside helper functions are visible at the top level.
     """
-    context = {
+    namespace = {
         "datasets": datasets,
         "np": np,
         "pd": pd,
         "stats": stats,
     }
-    local_vars = {}
     try:
-        exec(compile(code, "<agent_code>", "exec"), context, local_vars)  # noqa: S102
-        # Try result from local_vars first, then context (in case agent assigned to global scope)
-        result = local_vars.get("result", context.get("result"))
-        # Fallback: collect all non-private variables if result not set
+        exec(compile(code, "<agent_code>", "exec"), namespace)  # noqa: S102
+
+        result = namespace.get("result")
+
+        # Fallback: if result not set, collect all non-builtin variables the agent created
         if result is None:
-            candidates = {k: v for k, v in local_vars.items() if not k.startswith("_")}
+            candidates = {
+                k: v for k, v in namespace.items()
+                if k not in _BUILTIN_KEYS and not k.startswith("_")
+            }
             if candidates:
-                result = {k: _serialize(v) for k, v in candidates.items() if _serialize(v) is not None}
-        if result is None:
-            return {"error": "Code did not set the `result` variable"}
+                serialized = {k: _serialize(v) for k, v in candidates.items()}
+                result = {k: v for k, v in serialized.items() if v is not None}
+
+        if not result:
+            logger.warning("Sandbox: code did not set result variable.\nCode:\n%s", code[:500])
+            return {"error": "Code did not set the `result` variable. Add: result = {'key': value} at the end."}
+
         # Serialize the result
         if isinstance(result, dict):
             return {k: _serialize(v) for k, v in result.items()}
         return {"value": _serialize(result)}
+
     except Exception as e:
+        logger.error("Sandbox error: %s\nCode:\n%s", e, code[:500])
         return {"error": f"Sandbox error: {type(e).__name__}: {e}", "code_attempted": code[:300]}
