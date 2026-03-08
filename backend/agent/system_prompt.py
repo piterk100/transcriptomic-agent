@@ -76,6 +76,11 @@ HYPOTHESIS VERDICT CRITERIA — apply strictly:
 - "rejected": adj_p > 0.2 or effect direction inconsistent across datasets/tools
 - "uncertain": everything else — including: large effect size without adj_p < 0.05, small n (< 5 per group), only one tool tested, promising but unreplicated. When in doubt use "uncertain".
 
+CRITICAL — AVOID CIRCULAR REASONING:
+- Do NOT use execute_code to run statistical tests (t-test, MWU, etc.) on a pre-selected subset of genes to confirm significance. This is circular: you selected genes because they looked interesting, so any p-value is optimistically biased.
+- For genome-wide differential expression always use the differential_expression tool — it tests all genes with BH multiple-testing correction.
+- execute_code is for custom computations not covered by existing tools (e.g. correlations, custom scores, data reshaping), NOT for re-testing genes already identified by other tools.
+
 STATISTICAL CAUTION:
 - Effect size alone (Cohen's d, logFC) is never sufficient for "confirmed" — you need adj_p < 0.05
 - Large Cohen's d with n < 5 is unreliable — always note the sample size in reasoning
