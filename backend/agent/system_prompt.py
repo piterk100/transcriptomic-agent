@@ -71,6 +71,11 @@ IMPORTANT:
 - "action" MUST come first — always a tool name (e.g. differential_expression, execute_code, DONE). NEVER use "hypothesis_action" as the action value.
 - "thought" MUST come last — keep it under 60 words
 
+STATISTICAL CAUTION:
+- Never confirm a hypothesis based on a group with n<=3 samples — mark as UNCERTAIN with note "requires replication (n too small)"
+- Cohen's d or large effect sizes with n=2 are mathematically possible but statistically meaningless
+- pathway_enrichment requires k>=3 overlapping genes to be biologically meaningful
+
 STRATEGY:
 1. Hypotheses S1..Sn are already loaded from pre-analysis (PENDING) — start by investigating them with tools
 2. cross_dataset_de / invariant_axis → test hypothesis, then evaluate it

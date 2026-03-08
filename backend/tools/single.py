@@ -236,7 +236,7 @@ def pathway_enrichment(datasets, genes=None, **_):
     for pathway, pw_genes in PATHWAYS.items():
         overlap = [g for g in pw_genes if g.upper() in gene_set]
         k, K = len(overlap), len(pw_genes)
-        if k == 0:
+        if k < 3:  # require at least 3 overlapping genes to avoid single-gene artefacts
             continue
         # P(X >= k) under hypergeometric null: drawing n genes from N_BACKGROUND that contains K pathway genes
         p_val = float(hypergeom.sf(k - 1, N_BACKGROUND, K, n))
