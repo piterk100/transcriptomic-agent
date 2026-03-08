@@ -48,7 +48,7 @@ export default function App() {
   const [hypotheses, setHypotheses] = useState([]);
   const [step,          setStep]          = useState(0);
   const [freeSteps,     setFreeSteps]     = useState(6);
-  const [agentMode,     setAgentMode]     = useState("free");
+  const [agentMode,     setAgentMode]     = useState("reproduce");
   const [currentStatus, setCurrentStatus] = useState("");
   const [streamingText, setStreamingText] = useState("");
   const logEnd   = useRef(null);
@@ -98,6 +98,7 @@ export default function App() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ dataset_ids: loaded.map(d => d.id), group_cols: groupMap, free_steps: freeSteps, mode: agentMode }),
+        // mode: "reproduce" (temperature=0) | "explore" (temperature=1)
         signal: controller.signal,
       });
 
@@ -149,7 +150,7 @@ export default function App() {
         <div style={{ width: 8, height: 8, borderRadius: "50%", background: phase === "running" ? "#3dcc7a" : "#223322", boxShadow: phase === "running" ? "0 0 10px #3dcc7a" : "none" }} className={phase === "running" ? "blink" : ""} />
         <span style={{ fontFamily: "'Syne',sans-serif", fontSize: 20, fontWeight: 800, letterSpacing: 3, color: "#3dcc7a" }}>TRANSCRIPTOMIC AGENT</span>
         <span style={{ fontSize: 13, color: "#2a5a3a", letterSpacing: 2 }}>/ MULTI-DATASET · CROSS-COHORT</span>
-        {phase === "running" && !currentStatus && <span style={{ marginLeft: "auto", fontSize: 14, color: "#3a7a4a" }}>STEP {step}/{(agentMode === "hybrid" ? 8 + freeSteps : freeSteps)}</span>}
+        {phase === "running" && !currentStatus && <span style={{ marginLeft: "auto", fontSize: 14, color: "#3a7a4a" }}>STEP {Math.min(step, freeSteps)}/{freeSteps}</span>}
       </div>
 
       <div style={{ display: "flex", height: "calc(100vh - 58px)" }}>
@@ -185,33 +186,22 @@ export default function App() {
 
             <div className="sec">// MODE</div>
             <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-              {["free", "hybrid"].map(m => (
-                <button key={m} className="btn bsm" onClick={() => setAgentMode(m)}
-                  style={{ flex: 1, borderColor: agentMode === m ? "#3dcc7a" : "#2a5a3a", color: agentMode === m ? "#3dcc7a" : "#2a5a3a", background: agentMode === m ? "#0b160f" : "transparent" }}>
-                  {m.toUpperCase()}
+              {[
+                { key: "reproduce", label: "REPRODUCE", sub: "deterministic" },
+                { key: "explore",   label: "EXPLORE",   sub: "creative" },
+              ].map(({ key, label, sub }) => (
+                <button key={key} className="btn bsm" onClick={() => setAgentMode(key)}
+                  style={{ flex: 1, borderColor: agentMode === key ? "#3dcc7a" : "#2a5a3a", color: agentMode === key ? "#3dcc7a" : "#2a5a3a", background: agentMode === key ? "#0b160f" : "transparent", paddingBottom: 8 }}>
+                  {label}
+                  <div style={{ fontSize: 9, color: "#1a3a22", letterSpacing: 1, marginTop: 3 }}>{sub}</div>
                 </button>
               ))}
             </div>
 
-            {agentMode === "hybrid" ? <>
-              <div className="sec">// STEPS</div>
-              <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 11, color: "#2a5a3a", marginBottom: 4, letterSpacing: 1 }}>PROTOCOL</div>
-                  <input type="number" value={8} disabled style={{ opacity: 0.4, width: "100%" }} />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 11, color: "#3a7a4a", marginBottom: 4, letterSpacing: 1 }}>FREE</div>
-                  <input type="number" value={freeSteps} min={0} max={20}
-                    onChange={e => setFreeSteps(parseInt(e.target.value))} style={{ width: "100%" }} />
-                </div>
-              </div>
-            </> : <>
-              <div className="sec">// STEPS</div>
-              <input type="number" value={freeSteps} min={1} max={30}
-                onChange={e => setFreeSteps(parseInt(e.target.value))}
-                style={{ marginBottom: 12 }} />
-            </>}
+            <div className="sec">// STEPS</div>
+            <input type="number" value={freeSteps} min={1} max={30}
+              onChange={e => setFreeSteps(parseInt(e.target.value))}
+              style={{ marginBottom: 12 }} />
 
             <button className="btn" style={{ background: phase === "running" ? "#080e0a" : "transparent" }}
               onClick={phase === "running" ? () => abortRef.current?.abort() : runAgent}>
@@ -228,7 +218,7 @@ export default function App() {
             <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 10, padding: "10px 28px", borderBottom: "1px solid #1a2e1a", background: "#0b0f0b" }}>
               <div className="spinner" />
               <span className="thinking-indicator" style={{ fontSize: 13, color: "#3dcc7a", letterSpacing: 1 }}>{currentStatus}</span>
-              {step > 0 && <span style={{ marginLeft: "auto", fontSize: 12, color: "#2a5a3a" }}>STEP {step}/{(agentMode === "hybrid" ? 8 + freeSteps : freeSteps)}</span>}
+              {step > 0 && <span style={{ marginLeft: "auto", fontSize: 12, color: "#2a5a3a" }}>STEP {Math.min(step, freeSteps)}/{freeSteps}</span>}
             </div>
           )}
 

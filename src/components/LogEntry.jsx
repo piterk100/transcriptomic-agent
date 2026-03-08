@@ -123,6 +123,23 @@ export default function LogEntry({ entry }) {
             );
           })()}
 
+          {entry.type === "mode" && (
+            <div style={{
+              padding: "6px 10px",
+              background: entry.mode === "reproduce" ? "#0d1a0f" : "#1a0d1a",
+              border: `1px solid ${entry.mode === "reproduce" ? "#1a3a22" : "#3a1a3a"}`,
+              borderRadius: 3,
+              fontSize: 9,
+              color: entry.mode === "reproduce" ? "#3dcc7a" : "#cc7aff",
+              letterSpacing: 2,
+              marginBottom: 8,
+            }}>
+              {entry.mode === "reproduce"
+                ? "⬡ REPRODUCE MODE — temperature=0, fully deterministic"
+                : "⬡ EXPLORE MODE — temperature=1, creative exploration"}
+            </div>
+          )}
+
           {entry.type === "seed" && (
             <div style={{ padding: "8px 10px", background: "#0d0f18", border: "1px solid #2a3a5a", borderRadius: 3 }}>
               <div style={{ fontSize: 12, color: "#5577aa", letterSpacing: 1, marginBottom: 5 }}>⬡ STATISTICAL PRE-ANALYSIS</div>

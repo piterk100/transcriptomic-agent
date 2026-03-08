@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from .agent.runner import run_agent_loop, PROTOCOL_STEPS
+from .agent.runner import run_agent_loop
 
 load_dotenv()
 
@@ -104,7 +104,7 @@ class RunRequest(BaseModel):
     dataset_ids: list[str]
     group_cols: dict[str, str]  # dataset_id → chosen group_col
     free_steps: int = 6
-    mode: str = "free"
+    mode: str = "reproduce"  # "reproduce" | "explore"
 
 
 @app.post("/api/run")
@@ -124,12 +124,11 @@ async def run_agent(req: RunRequest):
             ds["groups"] = ds["meta"][chosen_col].dropna().unique().tolist()
         datasets.append(ds)
 
-    N_PROTOCOL = 8
-    max_steps = (N_PROTOCOL + req.free_steps) if req.mode == "hybrid" else req.free_steps
-    logger.info("Run started: datasets=%s max_steps=%d mode=%s", req.dataset_ids, max_steps, req.mode)
+    temperature = 0.0 if req.mode == "reproduce" else 1.0
+    logger.info("Run started: datasets=%s max_steps=%d mode=%s", req.dataset_ids, req.free_steps, req.mode)
 
     async def generate():
-        async for event in run_agent_loop(datasets, max_steps, api_key, mode=req.mode):
+        async for event in run_agent_loop(datasets, req.free_steps, api_key, temperature=temperature):
             if event.get("type") == "error":
                 logger.error("Agent error: %s", event.get("text", ""))
             yield f"data: {json.dumps(event, default=str)}\n\n"

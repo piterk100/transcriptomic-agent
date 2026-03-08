@@ -189,24 +189,11 @@ def _write_report(datasets: list, seed_summary: str, seed_data: dict, steps: lis
     return path
 
 
-PROTOCOL_STEPS = [
-    "Run dataset_summary to understand the data structure.",
-    "Run differential_expression for ALL pairwise group combinations present in the data. Use group names from dataset_summary.",
-    "Run pathway_enrichment on all significant DE genes combined (adj_p < 0.05). If no DE genes found, use top 20 genes by absolute logFC.",
-    "Run top_variable_genes (n=50) for each dataset, then batch_detection on top 10 variable genes.",
-    "Run subgroup_discovery for each group that has n >= 6 samples.",
-    "Run gene_network_hub (top_n=30, corr_threshold=0.7) for each dataset.",
-    "Run cross_dataset_de for all group pairs present in >= 2 datasets. Skip if only one dataset loaded.",
-    "Run invariant_axis for the most biologically relevant group pair based on previous findings. Skip if only one dataset loaded.",
-]
-N_PROTOCOL_STEPS = len(PROTOCOL_STEPS)
-
-
 async def run_agent_loop(
     datasets: list,
     max_steps: int,
     api_key: str,
-    mode: str = "free",  # "free" or "hybrid"
+    temperature: float = 0.0,
 ) -> AsyncGenerator[dict, None]:
     """
     Async generator — yields log event dicts.
@@ -227,6 +214,7 @@ async def run_agent_loop(
     hypo_counter = 0                        # agent-proposed: H1, H2, ...
     report_steps: list[dict] = []           # collected for final report
 
+    yield {"type": "mode", "mode": "reproduce" if temperature == 0.0 else "explore", "temperature": temperature}
     yield {"type": "seed", "text": f"Pre-analysis: {len(seeds)} seed hypotheses generated", "summary": seed_summary}
     for s in seeds:
         yield {"type": "hypothesis_propose", "hypothesis": dict(s)}
@@ -250,15 +238,6 @@ async def run_agent_loop(
                 f"Step {step_num}/{max_steps}. {summary_block}\n\n"
                 "FINAL STEP — no more steps after this. Summarize all discoveries and hypothesis verdicts, then call DONE."
             )
-        elif mode == "hybrid" and step_num <= N_PROTOCOL_STEPS:
-            instruction = PROTOCOL_STEPS[step_num - 1]
-            user_content = f"Step {step_num}/{max_steps}. {summary_block}\n\nPROTOCOL [{step_num}/{N_PROTOCOL_STEPS}]: {instruction}"
-        elif mode == "hybrid" and step_num == N_PROTOCOL_STEPS + 1:
-            user_content = (
-                f"Step {step_num}/{max_steps}. {summary_block}\n\n"
-                "Protocol complete. You have full results above. Explore freely — "
-                "test new hypotheses, look for unexpected signals, use execute_code if needed."
-            )
         else:
             user_content = f"Step {step_num}/{max_steps}. {summary_block}\n\nWhat will you investigate?"
 
@@ -271,7 +250,7 @@ async def run_agent_loop(
             async with client.messages.stream(
                 model="claude-sonnet-4-20250514",
                 max_tokens=16000,
-                temperature=0,
+                temperature=temperature,
                 system=system_prompt,
                 messages=messages,
             ) as stream:
