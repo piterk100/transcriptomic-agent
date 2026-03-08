@@ -141,12 +141,6 @@ export default function LogEntry({ entry }) {
             <span style={{ fontSize: 15, color: "#3dcc7a", fontWeight: 600 }}>{entry.text}</span>
           )}
 
-          {entry.type === "report" && (
-            <div style={{ fontSize: 13, color: "#4a8a6a", marginTop: 4 }}>
-              <span style={{ color: "#2a5a3a" }}>📄 Report saved: </span>
-              <code style={{ color: "#3dcc7a", fontSize: 12 }}>{entry.path}</code>
-            </div>
-          )}
         </div>
       </div>
     </div>
