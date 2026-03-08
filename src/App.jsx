@@ -47,7 +47,7 @@ export default function App() {
   const [log,        setLog]        = useState([]);
   const [hypotheses, setHypotheses] = useState([]);
   const [step,          setStep]          = useState(0);
-  const [maxSteps,      setMaxSteps]      = useState(15);
+  const [freeSteps,     setFreeSteps]     = useState(6);
   const [agentMode,     setAgentMode]     = useState("free");
   const [currentStatus, setCurrentStatus] = useState("");
   const [streamingText, setStreamingText] = useState("");
@@ -97,7 +97,7 @@ export default function App() {
       const res = await fetch("http://localhost:8000/api/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dataset_ids: loaded.map(d => d.id), group_cols: groupMap, max_steps: maxSteps, mode: agentMode }),
+        body: JSON.stringify({ dataset_ids: loaded.map(d => d.id), group_cols: groupMap, free_steps: freeSteps, mode: agentMode }),
         signal: controller.signal,
       });
 
@@ -193,10 +193,25 @@ export default function App() {
               ))}
             </div>
 
-            <div className="sec">// MAX STEPS</div>
-            <input type="number" value={maxSteps} min={3} max={30}
-              onChange={e => setMaxSteps(parseInt(e.target.value))}
-              style={{ marginBottom: 12 }} />
+            {agentMode === "hybrid" ? <>
+              <div className="sec">// STEPS</div>
+              <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 11, color: "#2a5a3a", marginBottom: 4, letterSpacing: 1 }}>PROTOCOL</div>
+                  <input type="number" value={8} disabled style={{ opacity: 0.4, width: "100%" }} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 11, color: "#3a7a4a", marginBottom: 4, letterSpacing: 1 }}>FREE</div>
+                  <input type="number" value={freeSteps} min={0} max={20}
+                    onChange={e => setFreeSteps(parseInt(e.target.value))} style={{ width: "100%" }} />
+                </div>
+              </div>
+            </> : <>
+              <div className="sec">// STEPS</div>
+              <input type="number" value={freeSteps} min={1} max={30}
+                onChange={e => setFreeSteps(parseInt(e.target.value))}
+                style={{ marginBottom: 12 }} />
+            </>}
 
             <button className="btn" style={{ background: phase === "running" ? "#080e0a" : "transparent" }}
               onClick={phase === "running" ? () => abortRef.current?.abort() : runAgent}>

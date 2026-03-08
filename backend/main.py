@@ -103,7 +103,7 @@ async def upload_dataset(
 class RunRequest(BaseModel):
     dataset_ids: list[str]
     group_cols: dict[str, str]  # dataset_id → chosen group_col
-    max_steps: int = 15
+    free_steps: int = 6
     mode: str = "free"
 
 
@@ -124,12 +124,12 @@ async def run_agent(req: RunRequest):
             ds["groups"] = ds["meta"][chosen_col].dropna().unique().tolist()
         datasets.append(ds)
 
-    # hybrid: ~8 protocol + ~4 free + 1 summary = 13 recommended minimum; user controls max_steps
-    effective_max_steps = req.max_steps
-    logger.info("Run started: datasets=%s max_steps=%d mode=%s", req.dataset_ids, effective_max_steps, req.mode)
+    N_PROTOCOL = 8
+    max_steps = (N_PROTOCOL + req.free_steps) if req.mode == "hybrid" else req.free_steps
+    logger.info("Run started: datasets=%s max_steps=%d mode=%s", req.dataset_ids, max_steps, req.mode)
 
     async def generate():
-        async for event in run_agent_loop(datasets, effective_max_steps, api_key, mode=req.mode):
+        async for event in run_agent_loop(datasets, max_steps, api_key, mode=req.mode):
             if event.get("type") == "error":
                 logger.error("Agent error: %s", event.get("text", ""))
             yield f"data: {json.dumps(event, default=str)}\n\n"
