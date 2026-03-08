@@ -183,7 +183,8 @@ async def run_agent_loop(
             messages.append({"role": "user", "content": "ERROR: 'hypothesis_action' is not a valid tool name. The 'action' field must be a tool name like differential_expression, execute_code, etc. The 'hypothesis_action' is a separate JSON field. Please retry with a valid tool."})
             continue
 
-        yield {"type": "thought", "text": thought}
+        if thought:
+            yield {"type": "thought", "text": thought}
         await asyncio.sleep(0)  # flush thought before running tool
 
         loop = asyncio.get_event_loop()
