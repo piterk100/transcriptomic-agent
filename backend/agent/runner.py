@@ -34,6 +34,38 @@ def _repair_json(s: str) -> str:
             result.append(char)
     return "".join(result)
 
+
+def _extract_first_json_object(s: str) -> str | None:
+    """
+    Extract the first syntactically balanced JSON object from s.
+    Unlike a greedy regex, this correctly handles nested braces and strings,
+    and stops at the first complete top-level closing brace.
+    """
+    start = s.find("{")
+    if start == -1:
+        return None
+    depth = 0
+    in_string = False
+    escape = False
+    for i, char in enumerate(s[start:], start):
+        if escape:
+            escape = False
+            continue
+        if char == "\\" and in_string:
+            escape = True
+            continue
+        if char == '"':
+            in_string = not in_string
+            continue
+        if not in_string:
+            if char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    return s[start : i + 1]
+    return None
+
 from ..agent.system_prompt import build_system_prompt
 from ..agent.seeder import generate_seeds, extract_evidence_stats
 from ..tools.registry import TOOLS, CROSS_TOOL_NAMES, summarize_result
@@ -111,9 +143,9 @@ async def run_agent_loop(
             yield {"type": "error", "text": f"API error: {e}"}
             return
 
-        m = re.search(r"\{[\s\S]*\}", raw)
+        m = _extract_first_json_object(_repair_json(raw))
         try:
-            dec = json.loads(_repair_json(m.group(0) if m else raw))
+            dec = json.loads(m if m else raw)
         except json.JSONDecodeError:
             logger.error("JSON parse error at step %d: %s", step_num, raw[:200])
             yield {"type": "error", "text": f"JSON parse error: {raw[:200]}"}
@@ -157,7 +189,12 @@ async def run_agent_loop(
         loop = asyncio.get_event_loop()
         result = None
         if action == "execute_code":
-            code = params.get("code", "")
+            code = params.get("code", "").strip()
+            if not code:
+                logger.warning("execute_code at step %d: empty code parameter", step_num)
+                messages.append({"role": "assistant", "content": raw})
+                messages.append({"role": "user", "content": "ERROR: execute_code requires a non-empty 'code' parameter. Please provide the Python code to execute."})
+                continue
             yield {"type": "code", "code": code}
             result = await loop.run_in_executor(None, execute_sandbox, code, datasets)
             summary = f"ERROR: {result['error']}" if isinstance(result, dict) and result.get("error") else f"Code executed: {str(result)[:80]}"
