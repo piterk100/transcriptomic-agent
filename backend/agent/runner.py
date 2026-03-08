@@ -35,7 +35,7 @@ def _repair_json(s: str) -> str:
     return "".join(result)
 
 
-def _extract_first_json_object(s: str) -> str | None:
+def _extract_first_json_object(s: str):
     """
     Extract the first syntactically balanced JSON object from s.
     Unlike a greedy regex, this correctly handles nested braces and strings,
