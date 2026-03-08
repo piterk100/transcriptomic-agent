@@ -144,10 +144,25 @@ def _write_report(datasets: list, seed_summary: str, steps: list, hypotheses: li
     return path
 
 
+PROTOCOL_STEPS = [
+    "Run dataset_summary to understand the data structure.",
+    "Run differential_expression for ALL pairwise group combinations present in the data. Use group names from dataset_summary.",
+    "Run pathway_enrichment on all significant DE genes combined (adj_p < 0.05). If no DE genes found, use top 20 genes by absolute logFC.",
+    "Run top_variable_genes (n=50) for each dataset, then batch_detection on top 10 variable genes.",
+    "Run subgroup_discovery for each group that has n >= 6 samples.",
+    "Run gene_network_hub (top_n=30, corr_threshold=0.7) for each dataset.",
+    "Run cross_dataset_de for all group pairs present in >= 2 datasets. Skip if only one dataset loaded.",
+    "Run invariant_axis for the most biologically relevant group pair based on previous findings. Skip if only one dataset loaded.",
+    "Run pathway_enrichment on top 20 genes from cross_dataset_de or invariant_axis. Skip if only one dataset loaded.",
+    "Summarize all findings, evaluate all hypotheses, write conclusion.",
+]
+
+
 async def run_agent_loop(
     datasets: list,
     max_steps: int,
     api_key: str,
+    mode: str = "free",
 ) -> AsyncGenerator[dict, None]:
     """
     Async generator — yields log event dicts.
@@ -184,10 +199,16 @@ async def run_agent_loop(
             if hypotheses else ""
         )
 
-        messages.append({
-            "role": "user",
-            "content": f"Step {step_num}/{max_steps + 1}. {discovery_summary}{hypo_summary}\n\nWhat will you investigate?",
-        })
+        if mode == "protocol":
+            if i < len(PROTOCOL_STEPS):
+                instruction = PROTOCOL_STEPS[i]
+            else:
+                instruction = "Protocol complete. Summarize findings."
+            user_content = f"Step {step_num}/{max_steps + 1}. {discovery_summary}{hypo_summary}\n\nINSTRUCTION: {instruction}"
+        else:
+            user_content = f"Step {step_num}/{max_steps + 1}. {discovery_summary}{hypo_summary}\n\nWhat will you investigate?"
+
+        messages.append({"role": "user", "content": user_content})
 
         yield {"type": "thinking", "text": f"Agent thinking... ({step_num}/{max_steps})"}
 
@@ -196,6 +217,7 @@ async def run_agent_loop(
             async with client.messages.stream(
                 model="claude-sonnet-4-20250514",
                 max_tokens=16000,
+                temperature=0,
                 system=system_prompt,
                 messages=messages,
             ) as stream:

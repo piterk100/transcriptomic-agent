@@ -48,6 +48,7 @@ export default function App() {
   const [hypotheses, setHypotheses] = useState([]);
   const [step,          setStep]          = useState(0);
   const [maxSteps,      setMaxSteps]      = useState(15);
+  const [agentMode,     setAgentMode]     = useState("free");
   const [currentStatus, setCurrentStatus] = useState("");
   const [streamingText, setStreamingText] = useState("");
   const logEnd   = useRef(null);
@@ -96,7 +97,7 @@ export default function App() {
       const res = await fetch("http://localhost:8000/api/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dataset_ids: loaded.map(d => d.id), group_cols: groupMap, max_steps: maxSteps }),
+        body: JSON.stringify({ dataset_ids: loaded.map(d => d.id), group_cols: groupMap, max_steps: maxSteps, mode: agentMode }),
         signal: controller.signal,
       });
 
@@ -182,8 +183,21 @@ export default function App() {
               </div>
             ))}
 
+            <div className="sec">// MODE</div>
+            <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+              {["free", "protocol"].map(m => (
+                <button key={m} className="btn bsm" onClick={() => setAgentMode(m)}
+                  style={{ flex: 1, borderColor: agentMode === m ? "#3dcc7a" : "#2a5a3a", color: agentMode === m ? "#3dcc7a" : "#2a5a3a", background: agentMode === m ? "#0b160f" : "transparent" }}>
+                  {m.toUpperCase()}
+                </button>
+              ))}
+            </div>
+
             <div className="sec">// MAX STEPS</div>
-            <input type="number" value={maxSteps} min={3} max={30} onChange={e => setMaxSteps(parseInt(e.target.value))} style={{ marginBottom: 12 }} />
+            <input type="number" value={agentMode === "protocol" ? 10 : maxSteps} min={3} max={30}
+              onChange={e => setMaxSteps(parseInt(e.target.value))}
+              disabled={agentMode === "protocol"}
+              style={{ marginBottom: 12, opacity: agentMode === "protocol" ? 0.4 : 1 }} />
 
             <button className="btn" style={{ background: phase === "running" ? "#080e0a" : "transparent" }}
               onClick={phase === "running" ? () => abortRef.current?.abort() : runAgent}>
