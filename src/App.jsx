@@ -149,7 +149,7 @@ export default function App() {
         <div style={{ width: 8, height: 8, borderRadius: "50%", background: phase === "running" ? "#3dcc7a" : "#223322", boxShadow: phase === "running" ? "0 0 10px #3dcc7a" : "none" }} className={phase === "running" ? "blink" : ""} />
         <span style={{ fontFamily: "'Syne',sans-serif", fontSize: 20, fontWeight: 800, letterSpacing: 3, color: "#3dcc7a" }}>TRANSCRIPTOMIC AGENT</span>
         <span style={{ fontSize: 13, color: "#2a5a3a", letterSpacing: 2 }}>/ MULTI-DATASET · CROSS-COHORT</span>
-        {phase === "running" && !currentStatus && <span style={{ marginLeft: "auto", fontSize: 14, color: "#3a7a4a" }}>STEP {step}/{maxSteps}</span>}
+        {phase === "running" && !currentStatus && <span style={{ marginLeft: "auto", fontSize: 14, color: "#3a7a4a" }}>STEP {step}/{(agentMode === "hybrid" ? 8 + freeSteps : freeSteps)}</span>}
       </div>
 
       <div style={{ display: "flex", height: "calc(100vh - 58px)" }}>
@@ -228,7 +228,7 @@ export default function App() {
             <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 10, padding: "10px 28px", borderBottom: "1px solid #1a2e1a", background: "#0b0f0b" }}>
               <div className="spinner" />
               <span className="thinking-indicator" style={{ fontSize: 13, color: "#3dcc7a", letterSpacing: 1 }}>{currentStatus}</span>
-              {step > 0 && <span style={{ marginLeft: "auto", fontSize: 12, color: "#2a5a3a" }}>STEP {step}/{maxSteps}</span>}
+              {step > 0 && <span style={{ marginLeft: "auto", fontSize: 12, color: "#2a5a3a" }}>STEP {step}/{(agentMode === "hybrid" ? 8 + freeSteps : freeSteps)}</span>}
             </div>
           )}
 
