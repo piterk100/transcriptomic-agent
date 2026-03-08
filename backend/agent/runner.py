@@ -144,6 +144,13 @@ async def run_agent_loop(
             yield {"type": "done", "text": thought}
             return
 
+        # Guard: model sometimes puts "hypothesis_action" in the action field by mistake
+        if action == "hypothesis_action":
+            logger.warning("Agent used 'hypothesis_action' as action at step %d — skipping tool call", step_num)
+            messages.append({"role": "assistant", "content": raw})
+            messages.append({"role": "user", "content": "ERROR: 'hypothesis_action' is not a valid tool name. The 'action' field must be a tool name like differential_expression, execute_code, etc. The 'hypothesis_action' is a separate JSON field. Please retry with a valid tool."})
+            continue
+
         yield {"type": "thought", "text": thought}
         await asyncio.sleep(0)  # flush thought before running tool
 

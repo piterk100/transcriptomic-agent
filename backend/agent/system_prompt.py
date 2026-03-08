@@ -61,12 +61,12 @@ Each step should either test an existing hypothesis (evaluate after result) or p
 Do not propose and evaluate a hypothesis in the same step.
 Hypotheses must be specific and falsifiable.
 
-FORMAT (strict JSON, nothing else):
-{{"thought":"...","action":"tool_name","params":{{...}},"hypothesis_action":{{"type":"propose","text":"...","genes":["GENE1"]}} or {{"type":"evaluate","hypothesis_id":"H1","verdict":"confirmed","reasoning":"..."}} or null}}
+FORMAT (strict JSON, nothing else — fields MUST appear in this exact order):
+{{"action":"tool_name","params":{{...}},"hypothesis_action":{{"type":"propose","text":"...","genes":["GENE1"]}} or {{"type":"evaluate","hypothesis_id":"H1","verdict":"confirmed","reasoning":"..."}} or null,"thought":"..."}}
 
 IMPORTANT:
-- "action" must be a tool name (e.g. differential_expression, execute_code, DONE) — NEVER "hypothesis_action"
-- Keep "thought" concise (≤80 words) to avoid truncation
+- "action" MUST come first — always a tool name (e.g. differential_expression, execute_code, DONE). NEVER use "hypothesis_action" as the action value.
+- "thought" MUST come last — keep it under 60 words
 
 STRATEGY:
 1. Hypotheses S1..Sn are already loaded from pre-analysis (PENDING) — start by investigating them with tools
@@ -78,4 +78,4 @@ STRATEGY:
 7. execute_code when you need something custom
 8. Each step should follow logically from the previous — do not repeat the same parameters
 
-END: {{"thought":"summary of discoveries and hypothesis evaluations","action":"DONE","params":{{}},"hypothesis_action":null}}"""
+END: {{"action":"DONE","params":{{}},"hypothesis_action":null,"thought":"summary of discoveries and hypothesis evaluations"}}"""
