@@ -113,7 +113,7 @@ async def run_agent_loop(
 
         messages.append({
             "role": "user",
-            "content": f"Step {step_num}/{max_steps}. {discovery_summary}{hypo_summary}\n\nWhat will you investigate?",
+            "content": f"Step {step_num}/{max_steps + 1}. {discovery_summary}{hypo_summary}\n\nWhat will you investigate?",
         })
 
         yield {"type": "thinking", "text": f"Agent thinking... ({step_num}/{max_steps})"}
