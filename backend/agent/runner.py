@@ -183,17 +183,6 @@ async def run_agent_loop(
             messages.append({"role": "user", "content": "ERROR: 'hypothesis_action' is not a valid tool name. The 'action' field must be a tool name like differential_expression, execute_code, etc. The 'hypothesis_action' is a separate JSON field. Please retry with a valid tool."})
             continue
 
-        # Validate before emitting thought (avoid orphan thought with no tool)
-        if action == "execute_code":
-            code = params.get("code", "").strip()
-            if not code:
-                logger.warning("execute_code at step %d: empty code parameter", step_num)
-                messages.append({"role": "assistant", "content": raw})
-                messages.append({"role": "user", "content": "ERROR: execute_code requires a non-empty 'code' parameter. Please provide the Python code to execute."})
-                continue
-        else:
-            code = None
-
         if thought:
             yield {"type": "thought", "text": thought}
         await asyncio.sleep(0)  # flush thought before running tool
@@ -201,6 +190,13 @@ async def run_agent_loop(
         loop = asyncio.get_event_loop()
         result = None
         if action == "execute_code":
+            code = params.get("code", "").strip()
+            if not code:
+                logger.warning("execute_code at step %d: empty code parameter", step_num)
+                yield {"type": "error", "text": "execute_code: missing code parameter"}
+                messages.append({"role": "assistant", "content": raw})
+                messages.append({"role": "user", "content": "ERROR: execute_code requires a non-empty 'code' parameter. Please provide the Python code to execute."})
+                continue
             yield {"type": "code", "code": code}
             result = await loop.run_in_executor(None, execute_sandbox, code, datasets)
             summary = f"ERROR: {result['error']}" if isinstance(result, dict) and result.get("error") else f"Code executed: {str(result)[:80]}"

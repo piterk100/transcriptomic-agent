@@ -42,7 +42,10 @@ Available variables: datasets[], np (numpy), pd (pandas), stats (scipy.stats)
 Each element of datasets[] is a dict: ds['name'], ds['expr'] (DataFrame genes x samples), ds['meta'] (DataFrame samples x columns), ds['group_col'], ds['groups']
 REQUIRED: set result = {{"key": value, ...}} at the end of your code
 
-Example:
+The entire Python code must go inside the "code" string in params. Example JSON:
+{{"action":"execute_code","params":{{"code":"ds = datasets[0]\\nexpr = ds['expr']\\nresult = {{'n_genes': len(expr)}}"}},"hypothesis_action":null,"thought":"..."}}
+
+Longer example of the code string content:
 ds = datasets[0]
 expr = ds['expr']
 groups = ds['meta'][ds['group_col']]
