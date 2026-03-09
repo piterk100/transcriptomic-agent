@@ -244,25 +244,6 @@ export default function App() {
               </div>
             ))}
 
-            <div className="sec">// MODE</div>
-            <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-              {[
-                { key: "reproduce", label: "REPRODUCE", sub: "deterministic" },
-                { key: "explore",   label: "EXPLORE",   sub: "creative" },
-              ].map(({ key, label, sub }) => (
-                <button key={key} className="btn bsm" onClick={() => setAgentMode(key)}
-                  style={{ flex: 1, borderColor: agentMode === key ? "#3dcc7a" : "#2a5a3a", color: agentMode === key ? "#3dcc7a" : "#2a5a3a", background: agentMode === key ? "#0b160f" : "transparent", paddingBottom: 8 }}>
-                  {label}
-                  <div style={{ fontSize: 9, color: "#1a3a22", letterSpacing: 1, marginTop: 3 }}>{sub}</div>
-                </button>
-              ))}
-            </div>
-
-            <div className="sec">// STEPS</div>
-            <input type="number" value={freeSteps} min={1} max={30}
-              onChange={e => setFreeSteps(parseInt(e.target.value))}
-              style={{ marginBottom: 12 }} />
-
             {/* GROUP MAPPINGS */}
             {(() => {
               const allGroups = [...new Set(loaded.flatMap(ds => ds.groups))];
@@ -311,6 +292,25 @@ export default function App() {
                 </>
               );
             })()}
+
+            <div className="sec">// MODE</div>
+            <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+              {[
+                { key: "reproduce", label: "REPRODUCE", sub: "deterministic" },
+                { key: "explore",   label: "EXPLORE",   sub: "creative" },
+              ].map(({ key, label, sub }) => (
+                <button key={key} className="btn bsm" onClick={() => setAgentMode(key)}
+                  style={{ flex: 1, borderColor: agentMode === key ? "#3dcc7a" : "#2a5a3a", color: agentMode === key ? "#3dcc7a" : "#2a5a3a", background: agentMode === key ? "#0b160f" : "transparent", paddingBottom: 8 }}>
+                  {label}
+                  <div style={{ fontSize: 9, color: "#1a3a22", letterSpacing: 1, marginTop: 3 }}>{sub}</div>
+                </button>
+              ))}
+            </div>
+
+            <div className="sec">// STEPS</div>
+            <input type="number" value={freeSteps} min={1} max={30}
+              onChange={e => setFreeSteps(parseInt(e.target.value))}
+              style={{ marginBottom: 12 }} />
 
             <button className="btn" style={{ background: phase === "running" ? "#080e0a" : "transparent" }}
               onClick={phase === "running" ? () => abortRef.current?.abort() : runAgent}>
