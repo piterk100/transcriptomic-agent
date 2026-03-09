@@ -241,10 +241,18 @@ async def run_agent_loop(
         )
 
         summary_block = f"{discovery_summary}{hypo_summary}"
+        is_penultimate = step_num == max_steps - 1
         if is_last:
             user_content = (
                 f"Step {step_num}/{max_steps}. {summary_block}\n\n"
                 "FINAL STEP — no more steps after this. Summarize all discoveries and hypothesis verdicts, then call DONE."
+            )
+        elif is_penultimate:
+            user_content = (
+                f"Step {step_num}/{max_steps}. {summary_block}\n\n"
+                "PENULTIMATE STEP — only 1 step remains after this. "
+                "If you already have sufficient evidence to evaluate all hypotheses, call DONE now. "
+                "Otherwise use this step for one final targeted analysis, then call DONE next step."
             )
         else:
             user_content = f"Step {step_num}/{max_steps}. {summary_block}\n\nWhat will you investigate?"
