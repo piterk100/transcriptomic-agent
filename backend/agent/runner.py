@@ -397,8 +397,8 @@ async def run_agent_loop(
         messages.append({"role": "user", "content": f"Wynik {action}:\n{result_str}"})
 
     # Loop exhausted without DONE — write report with what we have
-    done_text = "Agent did not produce a final summary (step budget exhausted)."
-    yield {"type": "done", "text": done_text}
+    done_text = "Step budget exhausted without a final summary."
+    yield {"type": "done", "text": done_text, "exhausted": True}
     report_path = await loop.run_in_executor(
         None, _write_report, datasets, seed_summary, seed_data, report_steps, hypotheses, done_text
     )

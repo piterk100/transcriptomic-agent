@@ -154,8 +154,12 @@ export default function LogEntry({ entry }) {
             <span style={{ fontSize: 14, color: "#cc5555" }}>{entry.text}</span>
           )}
 
-          {entry.type === "done" && (
+          {entry.type === "done" && !entry.exhausted && (
             <span style={{ fontSize: 15, color: "#3dcc7a", fontWeight: 600 }}>{entry.text}</span>
+          )}
+
+          {entry.type === "done" && entry.exhausted && (
+            <span style={{ fontSize: 14, color: "#ccaa44" }}>⚠ {entry.text}</span>
           )}
 
         </div>
