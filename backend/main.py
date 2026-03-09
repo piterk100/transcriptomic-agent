@@ -40,6 +40,10 @@ app.add_middleware(
 # In-memory dataset store: dataset_id → dataset dict
 _datasets: dict[str, dict] = {}
 
+# Group name mappings: { "canonical_name": ["alias1", "alias2", ...] }
+# Example: { "normal": ["Endometrium-Normal", "normal endometrium"] }
+group_mappings: dict = {}
+
 KEYWORDS_BIO = {"source", "condition", "characteristics", "tissue", "group", "disease"}
 
 
@@ -192,7 +196,7 @@ async def run_agent(req: RunRequest):
     logger.info("Run started: datasets=%s max_steps=%d mode=%s", req.dataset_ids, req.free_steps, req.mode)
 
     async def generate():
-        async for event in run_agent_loop(datasets, req.free_steps, api_key, temperature=temperature):
+        async for event in run_agent_loop(datasets, req.free_steps, api_key, temperature=temperature, mappings=dict(group_mappings)):
             if event.get("type") == "error":
                 logger.error("Agent error: %s", event.get("text", ""))
             yield f"data: {json.dumps(event, default=str)}\n\n"
@@ -220,6 +224,27 @@ async def update_group_col(dataset_id: str, body: dict):
     _datasets[dataset_id]["group_col"] = gc
     _datasets[dataset_id]["groups"] = meta[gc].unique().tolist()
     return {"group_col": gc, "groups": meta[gc].unique().tolist()}
+
+
+@app.post("/api/group_mappings")
+async def set_group_mappings(body: dict):
+    """
+    Body: { "mappings": { "canonical": ["alias1", "alias2"] } }
+    Example: {
+        "mappings": {
+            "normal": ["Endometrium-Normal", "normal endometrium"],
+            "disease": ["Endometrium/Ovary-Disease", "endometrium with endometriosis"]
+        }
+    }
+    """
+    group_mappings.clear()
+    group_mappings.update(body.get("mappings", {}))
+    return {"status": "ok", "mappings": group_mappings}
+
+
+@app.get("/api/group_mappings")
+async def get_group_mappings():
+    return {"mappings": group_mappings}
 
 
 @app.delete("/api/datasets/{dataset_id}")

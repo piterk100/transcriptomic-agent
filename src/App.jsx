@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { flushSync } from "react-dom";
 import DatasetSlot from "./components/DatasetSlot";
 import LogEntry from "./components/LogEntry";
+import { setGroupMappings } from "./api";
 
 const STYLES = `
   @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&family=Syne:wght@700;800&display=swap');
@@ -51,6 +52,9 @@ export default function App() {
   const [agentMode,     setAgentMode]     = useState("reproduce");
   const [currentStatus, setCurrentStatus] = useState("");
   const [streamingText, setStreamingText] = useState("");
+  // mappingGroups: [{ canonical: string, aliases: Set<string> }]
+  const [mappingGroups, setMappingGroups] = useState([]);
+  const [mappingsOpen, setMappingsOpen] = useState(false);
   const logEnd   = useRef(null);
   const abortRef = useRef(null);
 
@@ -60,6 +64,43 @@ export default function App() {
   const addSlot    = () => setSlots(p => [...p, { id: Date.now(), exprFile: null, metaFile: null, name: `Dataset ${p.length + 1}` }]);
   const removeSlot = id => setSlots(p => p.filter(s => s.id !== id));
   const updSlot    = (id, k, v) => setSlots(p => p.map(s => s.id === id ? { ...s, [k]: v } : s));
+
+  const postMappings = useCallback((groups) => {
+    const mappings = {};
+    for (const { canonical, aliases } of groups) {
+      if (canonical.trim() && aliases.size > 0) mappings[canonical.trim()] = [...aliases];
+    }
+    setGroupMappings(mappings).catch(() => {});
+  }, []);
+
+  const addMappingGroup = () => {
+    const next = [...mappingGroups, { canonical: "", aliases: new Set() }];
+    setMappingGroups(next);
+    postMappings(next);
+  };
+
+  const updateMappingCanonical = (idx, value) => {
+    const next = mappingGroups.map((mg, i) => i === idx ? { ...mg, canonical: value } : mg);
+    setMappingGroups(next);
+    postMappings(next);
+  };
+
+  const toggleAlias = (idx, alias, checked) => {
+    const next = mappingGroups.map((mg, i) => {
+      if (i !== idx) return mg;
+      const aliases = new Set(mg.aliases);
+      if (checked) aliases.add(alias); else aliases.delete(alias);
+      return { ...mg, aliases };
+    });
+    setMappingGroups(next);
+    postMappings(next);
+  };
+
+  const removeMappingGroup = (idx) => {
+    const next = mappingGroups.filter((_, i) => i !== idx);
+    setMappingGroups(next);
+    postMappings(next);
+  };
 
   const loadAll = async () => {
     const newLoaded = [];
@@ -83,6 +124,7 @@ export default function App() {
     const m = {};
     newLoaded.forEach(d => { m[d.id] = d.group_col; });
     setGroupMap(m);
+    setMappingsOpen(newLoaded.length >= 2);
   };
 
   const runAgent = async () => {
@@ -220,6 +262,55 @@ export default function App() {
             <input type="number" value={freeSteps} min={1} max={30}
               onChange={e => setFreeSteps(parseInt(e.target.value))}
               style={{ marginBottom: 12 }} />
+
+            {/* GROUP MAPPINGS */}
+            {(() => {
+              const allGroups = [...new Set(loaded.flatMap(ds => ds.groups))];
+              return (
+                <>
+                  <div className="sec" style={{ cursor: "pointer", display: "flex", justifyContent: "space-between", userSelect: "none" }}
+                    onClick={() => setMappingsOpen(p => !p)}>
+                    <span>// GROUP MAPPINGS</span>
+                    <span style={{ color: "#3dcc7a" }}>{mappingsOpen ? "▾" : "▸"}</span>
+                  </div>
+                  {mappingsOpen && (
+                    <div style={{ marginBottom: 10 }}>
+                      {mappingGroups.map((mg, idx) => (
+                        <div key={idx} style={{ marginBottom: 8, padding: "8px 10px", border: "1px solid #1e2e20", background: "#0b0c0f" }}>
+                          <div style={{ display: "flex", gap: 5, marginBottom: 6 }}>
+                            <input type="text" value={mg.canonical} placeholder="canonical name"
+                              onChange={e => updateMappingCanonical(idx, e.target.value)}
+                              style={{ flex: 1 }} />
+                            <button className="btn bsm bdng" onClick={() => removeMappingGroup(idx)}>✕</button>
+                          </div>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 5 }}>
+                            {allGroups.map(g => (
+                              <label key={g} style={{ fontSize: 12, color: mg.aliases.has(g) ? "#3dcc7a" : "#3a5a4a", cursor: "pointer", display: "flex", alignItems: "center", gap: 3 }}>
+                                <input type="checkbox" checked={mg.aliases.has(g)}
+                                  onChange={e => toggleAlias(idx, g, e.target.checked)} />
+                                {g}
+                              </label>
+                            ))}
+                          </div>
+                          {mg.canonical && (
+                            <div style={{ fontSize: 11, color: "#2a5a3a", lineHeight: 1.6 }}>
+                              "{mg.canonical}" ← {allGroups.map(g => (
+                                <span key={g} style={{ marginRight: 4, color: mg.aliases.has(g) ? "#3dcc7a" : "#2a4a3a" }}>
+                                  [{g} {mg.aliases.has(g) ? "✓" : "✗"}]
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      <button className="btn bsm" style={{ width: "100%", marginBottom: 6 }} onClick={addMappingGroup}>
+                        + ADD MAPPING GROUP
+                      </button>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
 
             <button className="btn" style={{ background: phase === "running" ? "#080e0a" : "transparent" }}
               onClick={phase === "running" ? () => abortRef.current?.abort() : runAgent}>

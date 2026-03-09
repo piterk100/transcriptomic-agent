@@ -4,6 +4,17 @@ from scipy.stats import rankdata as _rankdata, norm as _norm, chi2 as _chi2
 from statsmodels.stats.multitest import multipletests
 
 
+def resolve_group(group_name: str, mappings: dict) -> str:
+    """
+    Given a group name and a mappings dict, return the canonical name
+    if this group_name is listed as an alias. Otherwise return group_name.
+    """
+    for canonical, aliases in mappings.items():
+        if group_name in aliases or group_name == canonical:
+            return canonical
+    return group_name
+
+
 def _cohen_d(a, b):
     pooled_sd = np.sqrt((np.std(a, ddof=1) ** 2 + np.std(b, ddof=1) ** 2) / 2) + 1e-9
     return (np.mean(a) - np.mean(b)) / pooled_sd
@@ -28,7 +39,7 @@ def _mwu_cross(expr_a_vals: np.ndarray, expr_b_vals: np.ndarray):
     return U, p_vals
 
 
-def cross_dataset_de(datasets, groupA=None, groupB=None, topN=30, min_effect_size=0.5, **_):
+def cross_dataset_de(datasets, groupA=None, groupB=None, mappings=None, topN=30, min_effect_size=0.5, **_):
     """
     Cross-dataset DE using Mann-Whitney U with:
     - per-dataset BH correction (controls within-dataset FDR)
@@ -37,6 +48,7 @@ def cross_dataset_de(datasets, groupA=None, groupB=None, topN=30, min_effect_siz
     - effect size filter: genes with avg |logFC| < min_effect_size are excluded after
       directional consistency check (reported in n_filtered_by_effect_size)
     """
+    mappings = mappings or {}
     per_ds: dict[str, dict] = {}  # gene → {ds_name → {logFC, rbc, p, adj_p}}
     used = []
 
@@ -45,8 +57,9 @@ def cross_dataset_de(datasets, groupA=None, groupB=None, topN=30, min_effect_siz
         meta = ds["meta"]
         group_col = ds["group_col"]
 
-        sA = [s for s in meta.index[meta[group_col] == groupA] if s in expr.columns]
-        sB = [s for s in meta.index[meta[group_col] == groupB] if s in expr.columns]
+        resolved = meta[group_col].apply(lambda g: resolve_group(g, mappings))
+        sA = [s for s in meta.index[resolved == groupA] if s in expr.columns]
+        sB = [s for s in meta.index[resolved == groupB] if s in expr.columns]
         if len(sA) < 2 or len(sB) < 2:
             continue
         used.append(ds["name"])
@@ -175,19 +188,21 @@ def cross_dataset_correlation(datasets, genes=None, **_):
     }
 
 
-def invariant_axis(datasets, groupA=None, groupB=None, topN=20, **_):
+def invariant_axis(datasets, groupA=None, groupB=None, mappings=None, topN=20, **_):
     all_genes = [set(ds["expr"].index) for ds in datasets]
     common = list(all_genes[0].intersection(*all_genes[1:])) if len(all_genes) > 1 else list(all_genes[0]) if all_genes else []
     if not common:
         return {"error": "No common genes across datasets"}
 
+    mappings = mappings or {}
     valid_ds = []
     for ds in datasets:
         expr = ds["expr"]
         meta = ds["meta"]
         group_col = ds["group_col"]
-        sA = [s for s in meta.index[meta[group_col] == groupA] if s in expr.columns]
-        sB = [s for s in meta.index[meta[group_col] == groupB] if s in expr.columns]
+        resolved = meta[group_col].apply(lambda g: resolve_group(g, mappings))
+        sA = [s for s in meta.index[resolved == groupA] if s in expr.columns]
+        sB = [s for s in meta.index[resolved == groupB] if s in expr.columns]
         if len(sA) >= 2 and len(sB) >= 2:
             valid_ds.append((ds, sA, sB))
 

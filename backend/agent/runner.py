@@ -194,11 +194,13 @@ async def run_agent_loop(
     max_steps: int,
     api_key: str,
     temperature: float = 0.0,
+    mappings: dict = None,
 ) -> AsyncGenerator[dict, None]:
     """
     Async generator — yields log event dicts.
     Consumed by FastAPI StreamingResponse.
     """
+    mappings = mappings or {}
     client = anthropic.AsyncAnthropic(api_key=api_key)
 
     all_genes = [set(ds["expr"].index) for ds in datasets]
@@ -208,6 +210,12 @@ async def run_agent_loop(
     loop = asyncio.get_event_loop()
     seeds, seed_summary, seed_data = await loop.run_in_executor(None, generate_seeds, datasets)
     system_prompt = build_system_prompt(datasets, len(common_genes), seed_summary=seed_summary)
+    if mappings:
+        mapping_text = "\n".join(
+            f"  '{canonical}' = {aliases}"
+            for canonical, aliases in mappings.items()
+        )
+        system_prompt += f"\n\nGROUP MAPPINGS (use these canonical names in cross-dataset tools):\n{mapping_text}"
     messages = []
     discoveries = []
     hypotheses: list[dict] = list(seeds)   # pre-populated with S1, S2, ...
@@ -338,7 +346,7 @@ async def run_agent_loop(
         elif action in TOOLS:
             try:
                 tool_fn = TOOLS[action]
-                result = await loop.run_in_executor(None, lambda: tool_fn(datasets, **params))
+                result = await loop.run_in_executor(None, lambda: tool_fn(datasets, mappings=mappings, **params))
                 summary = summarize_result(action, result)
                 discoveries.append({"action": action, "params": params, "summary": summary, "result": result})
                 yield {
