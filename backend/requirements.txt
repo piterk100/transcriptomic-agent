@@ -8,3 +8,4 @@ scikit-learn
 anthropic
 python-dotenv
 statsmodels
+gseapy==1.1.3

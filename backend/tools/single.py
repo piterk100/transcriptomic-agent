@@ -1,4 +1,5 @@
 import logging
+import os
 import numpy as np
 import pandas as pd
 from scipy import stats
@@ -10,20 +11,42 @@ from sklearn.metrics import silhouette_score as _silhouette_score
 
 logger = logging.getLogger(__name__)
 
-PATHWAYS = {
-    "Hallmark_Hypoxia":       ["VEGFA","SLC2A1","LDHA","ENO1","HK2","ALDOA","PGAM1","TPI1","PGK1","PFKL","GAPDH","PKM","BNIP3","BNIP3L","DDIT4","P4HA1","P4HA2","PLOD1","PLOD2","COL5A1"],
-    "Hallmark_EMT":           ["VIM","FN1","CDH2","TWIST1","SNAI1","SNAI2","ZEB1","ZEB2","MMP2","MMP9","ITGA5","TGFB1","ACTA2","COL1A1","COL1A2","COL3A1","SPARC","THBS1","SERPINE1","LOXL2"],
-    "Hallmark_Inflammation":  ["IL6","IL1B","TNF","CXCL8","CXCL1","CXCL2","CCL2","CCL5","ICAM1","VCAM1","PTGS2","NOS2","IL6ST","NFKBIA","RELB","IRF1","STAT1","CXCL10","MX1","ISG15"],
-    "Hallmark_Proliferation": ["MKI67","PCNA","MCM2","MCM6","CCNA2","CCNB1","CCNE1","CDK1","CDK2","BUB1","BUB1B","TOP2A","AURKB","AURKA","PLK1","CDC20","CDKN2A","RRM2","TYMS","E2F1"],
-    "Hallmark_Apoptosis":     ["CASP3","CASP7","CASP8","CASP9","BAX","BAD","BCL2","BCL2L1","CYCS","APAF1","TP53","PUMA","NOXA","BID","FAS","FASLG","TNFRSF10A","TNFRSF10B","DIABLO","XIAP"],
-    "Hallmark_IFN_gamma":     ["STAT1","IRF1","CXCL10","CXCL9","GBP1","GBP2","MX1","OAS1","IFIT1","IFIT2","IFIT3","ISG15","HLA-A","HLA-B","HLA-C","B2M","TAP1","TAPBP","PSMB9","PSMB10"],
-    "Hallmark_Angiogenesis":  ["VEGFA","VEGFB","VEGFC","KDR","FLT1","ANGPT1","ANGPT2","TEK","PDGFA","PDGFB","FGF2","FGFR1","NRP1","CXCL12","ENG","PECAM1","CDH5","NOTCH1","DLL4","HIF1A"],
-    "KEGG_ECM_Receptor":      ["COL1A1","COL1A2","COL3A1","COL4A1","COL5A1","FN1","LAMA1","LAMB1","LAMC1","ITGA1","ITGA2","ITGA3","ITGA5","ITGB1","ITGB3","ITGB5","THBS1","THBS2","VTN","SPP1"],
-    "KEGG_JAK_STAT":          ["JAK1","JAK2","JAK3","TYK2","STAT1","STAT2","STAT3","STAT4","STAT5A","STAT5B","STAT6","IL6","IL2","IL4","IL12A","IFNA1","IFNG","EPO","GH1","CISH"],
-    "KEGG_TGF_beta":          ["TGFB1","TGFB2","TGFB3","TGFBR1","TGFBR2","SMAD2","SMAD3","SMAD4","SMAD7","ACVR1","ACVR2A","BMP2","BMP4","BMP7","ID1","ID2","ID3","INHBA","LTBP1","NOG"],
-    "Hallmark_MYC_targets":   ["MYC","MYCN","MAX","CDK4","CDK6","RB1","E2F1","E2F2","CCND1","CCND2","CCNE1","MCM4","MCM5","CDC25A","LDHA","FASN","ODC1","SRM","NME1","NCL"],
-    "Hallmark_P53_pathway":   ["TP53","CDKN1A","MDM2","BAX","PUMA","NOXA","GADD45A","GADD45B","SESN1","SESN2","RRM2B","TIGAR","DDB2","XPC","POLK","ZMAT3","FAS","TNFRSF10B","PERP","APAF1"],
-}
+_GENESET_CACHE: dict = {}
+
+
+def _load_gene_sets() -> dict:
+    """
+    Load gene sets from local GMT file.
+    Path must be set via GMT_FILE environment variable.
+    Returns dict: {pathway_name: [gene1, gene2, ...]}
+    Raises RuntimeError if GMT_FILE is not set or file does not exist.
+    """
+    global _GENESET_CACHE
+    if _GENESET_CACHE:
+        return _GENESET_CACHE
+
+    gmt_path = os.environ.get("GMT_FILE", None)
+    if not gmt_path:
+        raise RuntimeError(
+            "GMT_FILE environment variable not set. "
+            "Download a GMT file from https://www.gsea-msigdb.org/gsea/msigdb/ "
+            "and set: export GMT_FILE=/path/to/h.all.v2023.2.Hs.symbols.gmt"
+        )
+    if not os.path.exists(gmt_path):
+        raise RuntimeError(f"GMT file not found: {gmt_path}")
+
+    gene_sets = {}
+    with open(gmt_path, "r") as f:
+        for line in f:
+            parts = line.strip().split("\t")
+            if len(parts) < 3:
+                continue
+            name = parts[0]
+            genes = [g.upper() for g in parts[2:] if g]
+            gene_sets[name] = genes
+
+    _GENESET_CACHE = gene_sets
+    return gene_sets
 
 
 def _get_ds(datasets, name):
@@ -212,48 +235,74 @@ def contextual_modules(datasets, datasetName=None, contextGene=None, topN=20, **
     }
 
 
-def pathway_enrichment(datasets, genes=None, **_):
+def pathway_enrichment(datasets: dict, genes: list = None, **_) -> dict:
+    """
+    Hypergeometric test + BH correction against gene sets from local GMT file.
+    GMT file path must be set via GMT_FILE environment variable.
+    """
     from scipy.stats import hypergeom
+    import pandas as pd
 
-    gene_set = {g.upper() for g in (genes or [])}
-    N_BACKGROUND = 20_000  # assumed background transcriptome size
-    n = len(gene_set)
-    raw_ps, results = [], []
+    try:
+        all_gene_sets = _load_gene_sets()
+    except RuntimeError as e:
+        return {"error": str(e)}
 
-    for pathway, pw_genes in PATHWAYS.items():
-        overlap = [g for g in pw_genes if g.upper() in gene_set]
-        k, K = len(overlap), len(pw_genes)
-        if k < 3:  # require at least 3 overlapping genes to avoid single-gene artefacts
+    N = 25000  # background: human transcriptome
+    gene_set_input = {g.upper() for g in (genes or [])}
+    n = len(gene_set_input)
+
+    if n == 0:
+        return {"error": "No genes provided"}
+
+    results = []
+    for pathway, pw_genes in all_gene_sets.items():
+        K = len(pw_genes)
+        if K == 0:
             continue
-        # P(X >= k) under hypergeometric null: drawing n genes from N_BACKGROUND that contains K pathway genes
-        p_val = float(hypergeom.sf(k - 1, N_BACKGROUND, K, n))
-        expected = max(n * K / N_BACKGROUND, 0.01)
+        overlap = [g for g in pw_genes if g in gene_set_input]
+        k = len(overlap)
+        if k < 2:
+            continue
+        p = float(hypergeom.sf(k - 1, N, K, n))
+        enrichment = round((k / n) / (K / N), 2) if n > 0 else 0
         results.append({
             "pathway": pathway,
             "overlap_genes": overlap,
-            "k": k, "K": K,
-            "enrichment_fold": round(k / expected, 2),
-            "p": round(p_val, 6),
+            "k": k,
+            "K": K,
+            "n_input": n,
+            "enrichment_fold": enrichment,
+            "p": round(p, 6),
         })
-        raw_ps.append(p_val)
 
-    if results:
-        _, adj_ps, _, _ = multipletests(raw_ps, method="fdr_bh")
-        for i, r in enumerate(results):
-            r["adj_p"] = round(float(adj_ps[i]), 6)
-        results.sort(key=lambda r: (r["adj_p"], -r["enrichment_fold"]))
+    if not results:
+        return {
+            "genes_input": n,
+            "n_pathways_tested": len(all_gene_sets),
+            "top_enriched": [],
+            "n_significant": 0,
+            "interpretation": "No significant enrichment found (k<2 for all pathways)",
+        }
 
-    sig = [r for r in results if r.get("adj_p", 1.0) < 0.05]
+    df = pd.DataFrame(results)
+    _, adj_p, _, _ = multipletests(df["p"].values, method="fdr_bh")
+    df["adj_p"] = adj_p.round(6)
+    df = df.sort_values("adj_p")
+
+    sig = df[df["adj_p"] < 0.05]
+    top = df.head(10).to_dict("records")
+
     return {
         "genes_input": n,
-        "n_pathways_tested": len(results),
+        "n_pathways_tested": len(all_gene_sets),
         "n_significant": len(sig),
-        "top_enriched": results[:8],
+        "top_enriched": top,
         "interpretation": (
-            f"Top enriched: {results[0]['pathway']} "
-            f"(k={results[0]['k']}, x{results[0]['enrichment_fold']}, adj_p={results[0]['adj_p']})"
-            if results else "No significant enrichment"
-        ),
+            f"Top: {top[0]['pathway']} "
+            f"(k={top[0]['k']}, x{top[0]['enrichment_fold']}, "
+            f"adj_p={top[0]['adj_p']:.4f})"
+        ) if top else "No significant enrichment found",
     }
 
 
