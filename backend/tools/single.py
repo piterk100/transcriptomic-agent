@@ -1,11 +1,14 @@
+import logging
 import numpy as np
 import pandas as pd
 from scipy import stats
-from scipy.stats import rankdata as _rankdata, norm as _norm
+from scipy.stats import mannwhitneyu as _mwu
 from statsmodels.stats.multitest import multipletests
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score as _silhouette_score
+
+logger = logging.getLogger(__name__)
 
 PATHWAYS = {
     "Hallmark_Hypoxia":       ["VEGFA","SLC2A1","LDHA","ENO1","HK2","ALDOA","PGAM1","TPI1","PGK1","PFKL","GAPDH","PKM","BNIP3","BNIP3L","DDIT4","P4HA1","P4HA2","PLOD1","PLOD2","COL5A1"],
@@ -51,77 +54,61 @@ def top_variable_genes(datasets, datasetName=None, n=40, **_):
     return [{"gene": gene, "variance": round(float(var), 4)} for gene, var in variances.items()]
 
 
-def _mwu_vectorized(vals_a: np.ndarray, vals_b: np.ndarray):
-    """
-    Vectorized Mann-Whitney U test across all genes simultaneously.
-    vals_a: (n_genes, nA), vals_b: (n_genes, nB)
-    Returns U-statistics and two-sided p-values (normal approximation with tie correction).
-    """
-    nA, nB = vals_a.shape[1], vals_b.shape[1]
-    n = nA + nB
-    combined = np.concatenate([vals_a, vals_b], axis=1)  # (n_genes, n)
-
-    # Rank each gene's values with average tie handling
-    ranks = np.vstack([_rankdata(row, method="average") for row in combined])
-    rank_sum_A = ranks[:, :nA].sum(axis=1)
-    U = rank_sum_A - nA * (nA + 1) / 2
-
-    # Tie correction: sum of (t^3 - t) for each tied group per gene
-    tie_sum = np.array([
-        np.sum((_cnts := np.unique(row, return_counts=True)[1]) ** 3 - _cnts)
-        for row in combined
-    ], dtype=float)
-    sigma_sq = nA * nB / (n * (n - 1)) * ((n ** 3 - n) / 12 - tie_sum / 12)
-    sigma = np.sqrt(np.maximum(sigma_sq, 1e-10))
-
-    z = (U - nA * nB / 2) / sigma
-    p_vals = 2 * _norm.sf(np.abs(z))
-    return U, p_vals
-
-
 def differential_expression(datasets, datasetName=None, groupA=None, groupB=None, topN=25, **_):
     ds = _get_ds(datasets, datasetName)
     expr: pd.DataFrame = ds["expr"]
     meta: pd.DataFrame = ds["meta"]
     group_col = ds["group_col"]
 
-    sA = meta.index[meta[group_col] == groupA].tolist()
-    sB = meta.index[meta[group_col] == groupB].tolist()
-    sA = [s for s in sA if s in expr.columns]
-    sB = [s for s in sB if s in expr.columns]
+    # Consistent with seeder: use index.intersection(expr.columns)
+    sA = meta.index[meta[group_col] == groupA].intersection(expr.columns)
+    sB = meta.index[meta[group_col] == groupB].intersection(expr.columns)
 
-    if len(sA) < 2 or len(sB) < 2:
+    if len(sA) < 3 or len(sB) < 3:
         return {"error": f"Too few samples: {groupA}({len(sA)}), {groupB}({len(sB)})"}
 
     nA, nB = len(sA), len(sB)
-    exprA_vals = expr[sA].values
-    exprB_vals = expr[sB].values
 
-    U, p_vals = _mwu_vectorized(exprA_vals, exprB_vals)
+    # Per-gene MWU using scipy — consistent with seeder.generate_seeds()
+    results = []
+    for gene in expr.index:
+        a_vals = expr.loc[gene, sA].values.astype(float)
+        b_vals = expr.loc[gene, sB].values.astype(float)
+        if np.std(a_vals) == 0 and np.std(b_vals) == 0:
+            continue
+        try:
+            res = _mwu(a_vals, b_vals, alternative="two-sided")
+        except Exception:
+            continue
+        logfc = float(a_vals.mean() - b_vals.mean())
+        rbc = float(1.0 - 2.0 * res.statistic / (nA * nB))
+        results.append({"gene": gene, "logFC": logfc, "rbc": rbc, "p": float(res.pvalue)})
 
-    # Effect sizes: logFC (assumes log-normalized input) + rank-biserial correlation
-    log_fc = expr[sA].mean(axis=1).values - expr[sB].mean(axis=1).values
-    rbc = 1.0 - 2.0 * U / (nA * nB)  # rank-biserial correlation ∈ [-1, 1]
+    if not results:
+        return {"error": f"No testable genes for {groupA} vs {groupB}"}
 
-    _, adj_p, _, _ = multipletests(np.nan_to_num(p_vals, nan=1.0), method="fdr_bh")
+    df = pd.DataFrame(results)
+    _, adj_p, _, _ = multipletests(df["p"].values, method="fdr_bh")
+    df["adj_p"] = adj_p
 
-    results_df = pd.DataFrame({
-        "gene": expr.index,
-        "logFC": np.round(log_fc, 3),
-        "rbc":   np.round(rbc, 3),
-        "p":     p_vals,
-        "adj_p": np.round(adj_p, 4),
-    }).set_index("gene")
+    n_genes_tested = len(df)
+    n_raw_sig = int((df["p"] < 0.05).sum())
+    n_bh_sig = int((df["adj_p"] < 0.05).sum())
+    logger.info(
+        "DE %s | %s vs %s: tested=%d raw_sig=%d bh_sig=%d",
+        ds["name"], groupA, groupB, n_genes_tested, n_raw_sig, n_bh_sig,
+    )
 
-    sig = results_df[results_df["adj_p"] < 0.05]
-    top_up   = sig.nlargest(topN, "logFC")[["logFC", "rbc", "adj_p"]].reset_index().to_dict("records")
-    top_down = sig.nsmallest(topN, "logFC")[["logFC", "rbc", "adj_p"]].reset_index().to_dict("records")
+    sig = df[df["adj_p"] < 0.05].sort_values("adj_p")
+    top_up   = sig[sig["logFC"] > 0].head(topN)[["gene", "logFC", "rbc", "adj_p"]].round({"logFC": 3, "rbc": 3, "adj_p": 4}).to_dict("records")
+    top_down = sig[sig["logFC"] < 0].head(topN)[["gene", "logFC", "rbc", "adj_p"]].round({"logFC": 3, "rbc": 3, "adj_p": 4}).to_dict("records")
 
     return {
         "dataset": ds["name"],
         "comparison": f"{groupA} vs {groupB}",
-        "test": "Mann-Whitney U (BH-adjusted, tie-corrected)",
-        "n_significant": int(len(sig)),
+        "test": "Mann-Whitney U + BH (scipy, per-gene)",
+        "n_genes_tested": n_genes_tested,
+        "n_significant": n_bh_sig,
         "top_upregulated":   top_up,
         "top_downregulated": top_down,
     }
