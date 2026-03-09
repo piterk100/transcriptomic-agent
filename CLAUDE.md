@@ -11,12 +11,12 @@ This is a full-stack application with two independent servers that must both run
 
 ### Backend structure (`backend/`)
 
-- `main.py` — FastAPI app with two endpoints: `POST /api/datasets` (file upload) and `POST /api/run` (streaming SSE agent loop). Datasets are stored in-memory (`_datasets` dict); they are lost on server restart. `RunRequest` accepts `free_steps` (int) and `mode` (`"reproduce"` | `"explore"`); mode controls temperature (0.0 / 1.0).
-- `agent/runner.py` — Core async generator `run_agent_loop()` that drives the agentic loop: calls Claude (`claude-sonnet-4-20250514`) at the configured temperature, parses JSON responses, dispatches tool calls, and yields SSE events. Writes a Markdown report to `reports/` on completion (or on step budget exhaustion).
+- `main.py` — FastAPI app. Endpoints: `POST /api/datasets` (file upload), `PATCH /api/datasets/{id}/group_col`, `DELETE /api/datasets/{id}`, `POST /api/run` (streaming SSE agent loop), `POST /api/group_mappings`, `GET /api/group_mappings`. Datasets stored in-memory (`_datasets` dict). Group name mappings stored in `group_mappings` dict. `RunRequest` accepts `free_steps` (int) and `mode` (`"reproduce"` | `"explore"`); mode controls temperature (0.0 / 1.0). Calls `load_dotenv()` at startup. Group column autodetection uses keyword scoring (name keywords + value keywords + fewer-unique-values preference). GEO prefix cleaning strips `"key: value"` prefixes from group values.
+- `agent/runner.py` — Core async generator `run_agent_loop(datasets, max_steps, api_key, temperature, mappings)`. Guards: (1) blocks DONE when any hypothesis is still PENDING (except on the last step), (2) blocks duplicate tool calls with identical params in consecutive steps, (3) blocks tools in `_ONCE_ONLY` set (`cross_dataset_de`) after first call. Appends GROUP MAPPINGS block to system prompt when mappings are defined. Writes a Markdown report to `reports/` on completion or budget exhaustion.
 - `agent/seeder.py` — Pre-analysis that runs before the loop: for each dataset and every pairwise group combination, runs genome-wide MWU + BH correction to find DE genes. Also runs cross-dataset DE for group pairs present in ≥2 datasets. Returns seed hypotheses (S1, S2, ...) and a `seed_data` dict used in the report.
-- `agent/system_prompt.py` — Builds the system prompt injected into every Claude call, including dataset descriptions, seed summary, tool documentation, and statistical rules (no circular reasoning, no double-log, verdict criteria).
-- `tools/single.py` — Single-dataset tools: `differential_expression` (MWU per gene + BH correction, consistent with seeder), `pathway_enrichment` (Hallmarks/KEGG hypergeometric, k≥3 required), `subgroup_discovery` (PCA + KMeans), `gene_network_hub` (permutation-based co-expression), and others.
-- `tools/cross.py` — Cross-dataset tools: `cross_dataset_de` (Fisher's method for meta-DE), `invariant_axis` (Cohen's d stability), `cross_dataset_correlation`, `cross_dataset_rewiring`.
+- `agent/system_prompt.py` — Builds the system prompt injected into every Claude call, including dataset descriptions, seed summary, tool documentation, and statistical/efficiency rules (no circular reasoning, no double-log, verdict criteria, no duplicate tool calls, cross_dataset_de once-only, subgroup homogeneity interpretation).
+- `tools/single.py` — Single-dataset tools: `differential_expression` (MWU per gene + BH correction, consistent with seeder), `pathway_enrichment` (hypergeometric + BH against local GMT file; requires `GMT_FILE` env var), `subgroup_discovery` (PCA + KMeans; min subgroup size = max(3, 15% of samples)), `gene_network_hub` (permutation-based co-expression), and others.
+- `tools/cross.py` — Cross-dataset tools: `cross_dataset_de` (Fisher's method for meta-DE), `invariant_axis` (Cohen's d stability), `cross_dataset_correlation`, `cross_dataset_rewiring`. All group-based tools accept `mappings` param and use `resolve_group()` to map aliases to canonical names.
 - `tools/registry.py` — `TOOLS` dict mapping tool names to functions; `summarize_result()` for log display.
 - `tools/sandbox.py` — `execute_sandbox()` runs arbitrary Python code written by the agent using `exec()` with `datasets`, `np`, `pd`, `stats` in scope.
 
@@ -39,7 +39,8 @@ The backend streams SSE events of type: `mode`, `seed`, `thinking`, `thought`, `
 
 ### Frontend structure (`src/`)
 
-- `App.jsx` — Single-component app. Manages dataset slots, loaded dataset metadata, group column selection, mode (REPRODUCE/EXPLORE), step count, and the SSE stream reader. Three-panel layout: datasets panel (left), agent log (center), hypotheses panel (right).
+- `App.jsx` — Single-component app. Manages dataset slots, loaded dataset metadata, group column selection, group mappings, mode (REPRODUCE/EXPLORE), step count, and the SSE stream reader. Three-panel layout: datasets panel (left), agent log (center), hypotheses panel (right). Left panel order: DATASETS → GROUP COLUMNS → GROUP MAPPINGS → MODE → STEPS → START AGENT.
+- `api.js` — `setGroupMappings(mappings)` — POSTs canonical group name mappings to `/api/group_mappings`.
 - `components/DatasetSlot.jsx` — File upload UI for expression matrix + metadata CSV pair.
 - `components/LogEntry.jsx` — Renders individual SSE events in the log, including mode banner, seed pre-analysis block, hypothesis cards, and result expandable rows.
 
@@ -47,7 +48,15 @@ The backend streams SSE events of type: `mode`, `seed`, `thinking`, `thought`, `
 
 Datasets require two CSV files:
 - **Expression matrix**: genes as rows, samples as columns, first column is gene names (index). **Must be log-transformed** (log2 scale, typical range 3–14). The seeder asserts `max < 25` to catch raw counts.
-- **Metadata/phenotype**: samples as rows, columns are sample attributes (index = sample names); group columns are auto-detected as those with 2–10 unique values
+- **Metadata/phenotype**: samples as rows, columns are sample attributes (index = sample names); group columns are auto-detected from candidates with 2–15 unique values using keyword scoring; GEO-style `"key: value"` prefixes are automatically stripped from group values
+
+### Pathway enrichment
+
+`pathway_enrichment` uses a local GMT file (MSigDB/KEGG/Reactome). Set `GMT_FILE=/path/to/file.gmt` in `backend/.env` before starting the backend. If the path is relative, it is resolved relative to `backend/`. See README.md for download instructions.
+
+### Group mappings
+
+Group name equivalences across datasets (e.g. `"normal"` = `["Endometrium-Normal", "normal endometrium"]`) can be defined via `POST /api/group_mappings`. The frontend exposes a Group Mappings section in the left panel. Mappings are passed to all cross-dataset tool calls and appended to the agent's system prompt.
 
 ### Reports
 
@@ -72,7 +81,7 @@ npm install   # first time only
 npm start
 ```
 
-Set `ANTHROPIC_API_KEY` in `backend/.env`.
+Set `ANTHROPIC_API_KEY` and optionally `GMT_FILE` in `backend/.env`.
 
 ## Language & Git conventions
 
