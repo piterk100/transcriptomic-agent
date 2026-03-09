@@ -311,6 +311,15 @@ async def run_agent_loop(
         loop = asyncio.get_event_loop()
 
         if action == "DONE":
+            pending = [h["id"] for h in hypotheses if h["status"] == "pending"]
+            if pending and not is_last:
+                logger.warning("Agent called DONE at step %d with pending hypotheses: %s", step_num, pending)
+                messages.append({"role": "assistant", "content": raw})
+                messages.append({"role": "user", "content": (
+                    f"ERROR: Cannot call DONE — the following hypotheses are still PENDING: {pending}. "
+                    "Evaluate each one (confirmed/rejected/uncertain) before calling DONE."
+                )})
+                continue
             yield {"type": "done", "text": thought}
             report_path = await loop.run_in_executor(
                 None, _write_report, datasets, seed_summary, seed_data, report_steps, hypotheses, thought

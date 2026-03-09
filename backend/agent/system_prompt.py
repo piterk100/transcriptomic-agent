@@ -63,6 +63,7 @@ Manage hypotheses via the hypothesis_action field:
 Each step should either test an existing hypothesis (evaluate after result) or propose a new one.
 Do not propose and evaluate a hypothesis in the same step.
 Hypotheses must be specific and falsifiable.
+Do NOT call DONE while any hypothesis is still PENDING. Every hypothesis must be evaluated (confirmed/rejected/uncertain) before calling DONE.
 
 FORMAT (strict JSON, nothing else — fields MUST appear in this exact order):
 {{"action":"tool_name","params":{{...}},"hypothesis_action":{{"type":"propose","text":"...","genes":["GENE1"]}} or {{"type":"evaluate","hypothesis_id":"H1","verdict":"confirmed","reasoning":"..."}} or null,"thought":"..."}}
