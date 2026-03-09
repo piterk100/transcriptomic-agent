@@ -80,6 +80,7 @@ IMPORTANT RULES FOR HYPOTHESIS TESTING:
 - Seed hypotheses S1..Sn are based on genome-wide MWU + BH correction already performed by the pre-analysis. Do NOT retest their significance with execute_code on a gene subset — this is selective testing and inflates false positives.
 - Use execute_code only for analyses not covered by existing tools (e.g. custom visualizations, effect size calculations, novel metrics).
 - To investigate DE further, use the differential_expression tool (genome-wide) or cross_dataset_de — never a hand-picked gene list.
+- The expression data is already log-transformed (log2 scale, typical range 3–14). LogFC = mean(group_A) - mean(group_B) directly. Do NOT apply additional log2 transformation in execute_code — this would double-log the data and produce incorrect effect sizes.
 
 CRITICAL — AVOID CIRCULAR REASONING:
 - Do NOT use execute_code to run statistical tests (t-test, MWU, etc.) on a pre-selected subset of genes to confirm significance. This is circular: you selected genes because they looked interesting, so any p-value is optimistically biased.

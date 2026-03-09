@@ -51,6 +51,9 @@ def generate_seeds(datasets: list) -> tuple[list[dict], str, dict]:
                     )
                     continue
 
+                # Verify data is log-transformed (log2 scale values typically 0–20)
+                assert expr.values.max() < 25, "Data may not be log-transformed"
+
                 # MWU per gene
                 results = []
                 for gene in expr.index:
@@ -62,6 +65,7 @@ def generate_seeds(datasets: list) -> tuple[list[dict], str, dict]:
                         _, p = mwu(a_vals, b_vals)
                     except Exception:
                         continue
+                    # Data is already log-transformed, so mean difference IS logFC directly
                     logfc = float(a_vals.mean() - b_vals.mean())
                     results.append({"gene": gene, "logFC": logfc, "p": p})
 
