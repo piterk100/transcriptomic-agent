@@ -4,6 +4,7 @@ load_dotenv()
 import json
 import logging
 import os
+import re
 import uuid
 from io import StringIO
 from typing import Optional
@@ -108,6 +109,28 @@ async def upload_dataset(
 
     group_cols = candidates
     best_col = gc
+
+    # Clean group values — strip common GEO prefixes
+    def clean_group_values(series):
+        s = series.copy().astype(str).str.strip()
+        # Strip "key: value" prefixes like "disease state: ", "tissue: " etc.
+        s = s.str.replace(r'^[\w\s]+:\s*', '', regex=True).str.strip()
+        return s
+
+    # If after cleaning we get fewer unique values, use cleaned version
+    cleaned = clean_group_values(meta[gc])
+    if cleaned.nunique() < meta[gc].nunique():
+        meta[gc] = cleaned
+
+    # If every sample has a unique value, try to extract Disease/Normal/Control
+    if meta[gc].nunique() == len(meta):
+        extracted = meta[gc].str.extract(
+            r'(disease|normal|control|endometri|adenomyo|cancer|tumor|healthy)',
+            flags=re.IGNORECASE, expand=False
+        ).str.lower().str.strip()
+        if extracted.notna().all() and extracted.nunique() >= 2:
+            meta[gc] = extracted
+
     groups = meta[best_col].dropna().unique().tolist() if best_col else []
 
     ds_id = dataset_id or str(uuid.uuid4())
@@ -127,8 +150,17 @@ async def upload_dataset(
         "gene_count": len(expr.index),
         "sample_count": len(expr.columns),
         "group_cols": group_cols,
-        "group_col": best_col,
-        "groups": groups,
+        "group_col": gc,
+        "group_col_candidates": [
+            {
+                "col": c,
+                "unique_values": meta[c].dropna().unique().tolist()[:10]
+            }
+            for c in meta.columns
+            if 2 <= meta[c].nunique() <= 20
+            and meta[c].dtype == object
+        ],
+        "groups": meta[gc].unique().tolist(),
     }
 
 
@@ -175,6 +207,19 @@ async def run_agent(req: RunRequest):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@app.patch("/api/datasets/{dataset_id}/group_col")
+async def update_group_col(dataset_id: str, body: dict):
+    if dataset_id not in _datasets:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    gc = body.get("group_col")
+    meta = _datasets[dataset_id]["meta"]
+    if gc not in meta.columns:
+        raise HTTPException(status_code=400, detail=f"Column {gc} not found")
+    _datasets[dataset_id]["group_col"] = gc
+    _datasets[dataset_id]["groups"] = meta[gc].unique().tolist()
+    return {"group_col": gc, "groups": meta[gc].unique().tolist()}
 
 
 @app.delete("/api/datasets/{dataset_id}")

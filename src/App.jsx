@@ -174,8 +174,26 @@ export default function App() {
             {loaded.map(ds => (
               <div key={ds.id} style={{ marginBottom: 14 }}>
                 <div style={{ fontSize: 14, color: "#4a9a6a", marginBottom: 5, fontWeight: 600 }}>{ds.name}</div>
-                <select value={groupMap[ds.id] || ds.group_col} onChange={e => setGroupMap(prev => ({ ...prev, [ds.id]: e.target.value }))}>
-                  {ds.group_cols.map(c => <option key={c} value={c}>{c}</option>)}
+                <select value={groupMap[ds.id] || ds.group_col} onChange={async e => {
+                    const newCol = e.target.value;
+                    setGroupMap(prev => ({ ...prev, [ds.id]: newCol }));
+                    try {
+                      const r = await fetch(`/api/datasets/${ds.id}/group_col`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ group_col: newCol }),
+                      });
+                      if (r.ok) {
+                        const data = await r.json();
+                        setLoaded(prev => prev.map(d => d.id === ds.id ? { ...d, group_col: newCol, groups: data.groups } : d));
+                      }
+                    } catch {}
+                  }}>
+                  {(ds.group_col_candidates || ds.group_cols.map(c => ({ col: c, unique_values: [] }))).map(cand => (
+                    <option key={cand.col} value={cand.col}>
+                      {cand.col}: {cand.unique_values.slice(0, 3).join(", ")}
+                    </option>
+                  ))}
                 </select>
                 <div style={{ fontSize: 13, color: "#3a6a4a", marginTop: 5, lineHeight: 2 }}>
                   {ds.groups.map(g => <div key={g}>▸ {g}</div>)}
