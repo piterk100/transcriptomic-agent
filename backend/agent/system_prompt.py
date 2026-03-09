@@ -96,6 +96,10 @@ IMPORTANT RULES FOR HYPOTHESIS TESTING:
 - To investigate DE further, use the differential_expression tool (genome-wide) or cross_dataset_de — never a hand-picked gene list.
 - The expression data is already log-transformed (log2 scale, typical range 3–14). LogFC = mean(group_A) - mean(group_B) directly. Do NOT apply additional log2 transformation in execute_code — this would double-log the data and produce incorrect effect sizes.
 
+EFFICIENCY RULES:
+- Never call the same tool with identical parameters twice in a row.
+- If a tool returns a result, evaluate it immediately and move to the next action.
+
 CRITICAL — AVOID CIRCULAR REASONING:
 - Do NOT use execute_code to run statistical tests (t-test, MWU, etc.) on a pre-selected subset of genes to confirm significance. This is circular: you selected genes because they looked interesting, so any p-value is optimistically biased.
 - For genome-wide differential expression always use the differential_expression tool — it tests all genes with BH multiple-testing correction.
