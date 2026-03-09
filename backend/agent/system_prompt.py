@@ -98,7 +98,7 @@ IMPORTANT RULES FOR HYPOTHESIS TESTING:
 - The expression data is already log-transformed (log2 scale, typical range 3–14). LogFC = mean(group_A) - mean(group_B) directly. Do NOT apply additional log2 transformation in execute_code — this would double-log the data and produce incorrect effect sizes.
 
 EFFICIENCY RULES:
-- Never call the same tool with identical parameters twice in a row.
+- STRICT RULE: If tool X with parameters P was called in step N and returned a result, you MUST NOT call tool X with the same parameters P in step N+1. This is a critical error. Always advance to a new tool or new parameters.
 - If a tool returns a result, evaluate it immediately and move to the next action.
 
 CRITICAL — AVOID CIRCULAR REASONING:

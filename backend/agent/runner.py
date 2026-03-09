@@ -221,6 +221,7 @@ async def run_agent_loop(
     hypotheses: list[dict] = list(seeds)   # pre-populated with S1, S2, ...
     hypo_counter = 0                        # agent-proposed: H1, H2, ...
     report_steps: list[dict] = []           # collected for final report
+    last_call: tuple = None                 # (action, params_json) of previous step
 
     yield {"type": "mode", "mode": "reproduce" if temperature == 0.0 else "explore", "temperature": temperature}
     yield {"type": "seed", "text": f"Pre-analysis: {len(seeds)} seed hypotheses generated", "summary": seed_summary}
@@ -292,6 +293,17 @@ async def run_agent_loop(
         action = dec.get("action", "")
         params = dec.get("params", {})
         hypo_action = dec.get("hypothesis_action")
+
+        # Guard: reject identical tool call repeated from the previous step
+        current_call = (action, json.dumps(params, sort_keys=True, default=str))
+        if action not in ("DONE", "hypothesis_action") and current_call == last_call:
+            logger.warning("Duplicate tool call [%s] at step %d — forcing agent to advance", action, step_num)
+            messages.append({"role": "assistant", "content": raw})
+            messages.append({"role": "user", "content": (
+                f"CRITICAL ERROR: You just called '{action}' with identical parameters as the previous step. "
+                "This is not allowed. You MUST choose a different tool or different parameters."
+            )})
+            continue
 
         # Process propose BEFORE tool call
         if isinstance(hypo_action, dict) and hypo_action.get("type") == "propose" and hypo_action.get("text"):
@@ -408,6 +420,7 @@ async def run_agent_loop(
                 "reasoning": hypo_action.get("reasoning", ""),
             }
         report_steps.append(step_record)
+        last_call = current_call
 
         messages.append({"role": "assistant", "content": raw})
         result_str = json.dumps(result, default=str)[:2500] if result is not None else "null"
