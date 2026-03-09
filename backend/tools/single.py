@@ -402,6 +402,7 @@ def subgroup_discovery(datasets, datasetName=None, group=None, **_):
     sub1 = [samples[i] for i, l in enumerate(labels) if l == 0]
     sub2 = [samples[i] for i, l in enumerate(labels) if l == 1]
 
+    n_samples = len(samples)
     if min(len(sub1), len(sub2)) < max(3, int(0.15 * n_samples)):
         return {"error": f"Subgroup too small after clustering: sub1={len(sub1)}, sub2={len(sub2)}"}
 
