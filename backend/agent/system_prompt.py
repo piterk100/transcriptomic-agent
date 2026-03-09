@@ -76,6 +76,20 @@ HYPOTHESIS VERDICT CRITERIA — apply strictly:
 - "rejected": adj_p > 0.2 or effect direction inconsistent across datasets/tools
 - "uncertain": everything else — including: large effect size without adj_p < 0.05, small n (< 5 per group), only one tool tested, promising but unreplicated. When in doubt use "uncertain".
 
+HYPOTHESIS EVALUATION RULES:
+- A seed hypothesis S1..Sn should be marked CONFIRMED if:
+  (1) the comparison shows statistically significant DE genes (adj_p<0.05),
+  (2) the direction of top genes matches the seed hypothesis,
+  (3) sample sizes are adequate (n>=5 per group).
+  All three criteria were met in step 4 — mark S1 as CONFIRMED, do not
+  leave it PENDING when evidence is already collected.
+- Do not leave a hypothesis as PENDING if you already have sufficient
+  evidence to evaluate it. Evaluate immediately after collecting evidence.
+- CONFIRMED requires positive evidence. REJECTED requires contradicting
+  evidence. UNCERTAIN means evidence is mixed or insufficient.
+  PENDING means no evidence collected yet — it should not persist
+  beyond the step where evidence was gathered.
+
 IMPORTANT RULES FOR HYPOTHESIS TESTING:
 - Seed hypotheses S1..Sn are based on genome-wide MWU + BH correction already performed by the pre-analysis. Do NOT retest their significance with execute_code on a gene subset — this is selective testing and inflates false positives.
 - Use execute_code only for analyses not covered by existing tools (e.g. custom visualizations, effect size calculations, novel metrics).
