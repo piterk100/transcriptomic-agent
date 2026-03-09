@@ -97,6 +97,9 @@ IMPORTANT RULES FOR HYPOTHESIS TESTING:
 - To investigate DE further, use the differential_expression tool (genome-wide) or cross_dataset_de — never a hand-picked gene list.
 - The expression data is already log-transformed (log2 scale, typical range 3–14). LogFC = mean(group_A) - mean(group_B) directly. Do NOT apply additional log2 transformation in execute_code — this would double-log the data and produce incorrect effect sizes.
 
+TOOL-SPECIFIC INTERPRETATION RULES:
+- If subgroup_discovery returns "Subgroup too small after clustering", this means the group is transcriptionally homogeneous — no meaningful subtypes exist. Mark the subgroup hypothesis as REJECTED with this interpretation and move on. Do not retry with different parameters.
+
 EFFICIENCY RULES:
 - STRICT RULE: If tool X with parameters P was called in step N and returned a result, you MUST NOT call tool X with the same parameters P in step N+1. This is a critical error. Always advance to a new tool or new parameters.
 - STRICT RULE: cross_dataset_de may be called AT MOST ONCE per run. The topN parameter only affects display, not the core result. Calling it twice is always wasteful regardless of parameters.
