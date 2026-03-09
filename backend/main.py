@@ -77,8 +77,37 @@ async def upload_dataset(
     expr = expr[common_samples]
     meta = meta.loc[common_samples]
 
-    group_cols = _detect_group_cols(meta)
-    best_col = _detect_best_group_col(group_cols)
+    # Score each candidate column by number of unique values (2-10)
+    # and presence of biological keywords in column name OR values
+    kw_name = ["source", "condition", "characteristics", "tissue",
+               "group", "disease", "type", "status", "treatment", "diagnosis"]
+    kw_values = ["endometri", "adenomyo", "control", "normal", "disease",
+                 "tumor", "cancer", "healthy", "patient", "case", "eutopic",
+                 "ectopic", "peritoneal", "lesion", "ovary", "uterus"]
+
+    candidates = [c for c in meta.columns
+                  if meta[c].nunique() >= 2 and meta[c].nunique() <= 15]
+
+    if not candidates:
+        gc = meta.columns[0]
+    else:
+        def score_col(c):
+            score = 0
+            # Keyword in column name
+            if any(k in c.lower() for k in kw_name):
+                score += 2
+            # Keyword in values
+            sample_vals = " ".join(meta[c].dropna().astype(str).str.lower().tolist())
+            if any(k in sample_vals for k in kw_values):
+                score += 3
+            # Prefer fewer unique values (more group-like)
+            score += max(0, 5 - meta[c].nunique())
+            return score
+
+        gc = max(candidates, key=score_col)
+
+    group_cols = candidates
+    best_col = gc
     groups = meta[best_col].dropna().unique().tolist() if best_col else []
 
     ds_id = dataset_id or str(uuid.uuid4())
