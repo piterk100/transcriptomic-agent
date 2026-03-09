@@ -30,10 +30,19 @@ def _load_gene_sets() -> dict:
         raise RuntimeError(
             "GMT_FILE environment variable not set. "
             "Download a GMT file from https://www.gsea-msigdb.org/gsea/msigdb/ "
-            "and set: export GMT_FILE=/path/to/h.all.v2023.2.Hs.symbols.gmt"
+            "and set: export GMT_FILE=/path/to/h.all.v2026.1.Hs.symbols.gmt"
         )
+    # If path is relative, resolve it relative to this file's directory (backend/)
+    if not os.path.isabs(gmt_path):
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        # Go up one level if this file is in backend/tools/
+        backend_dir = os.path.dirname(base_dir)
+        gmt_path = os.path.join(backend_dir, gmt_path)
     if not os.path.exists(gmt_path):
-        raise RuntimeError(f"GMT file not found: {gmt_path}")
+        raise RuntimeError(
+            f"GMT file not found: {gmt_path}\n"
+            f"Make sure the file exists and GMT_FILE is set correctly in .env"
+        )
 
     gene_sets = {}
     with open(gmt_path, "r") as f:
