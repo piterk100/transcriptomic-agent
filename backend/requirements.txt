@@ -6,6 +6,6 @@ pandas
 scipy
 scikit-learn
 anthropic
-python-dotenv
+python-dotenv==1.0.1
 statsmodels
 gseapy==1.1.3
