@@ -99,6 +99,7 @@ IMPORTANT RULES FOR HYPOTHESIS TESTING:
 
 EFFICIENCY RULES:
 - STRICT RULE: If tool X with parameters P was called in step N and returned a result, you MUST NOT call tool X with the same parameters P in step N+1. This is a critical error. Always advance to a new tool or new parameters.
+- STRICT RULE: cross_dataset_de may be called AT MOST ONCE per run. The topN parameter only affects display, not the core result. Calling it twice is always wasteful regardless of parameters.
 - If a tool returns a result, evaluate it immediately and move to the next action.
 
 CRITICAL — AVOID CIRCULAR REASONING:

@@ -222,6 +222,8 @@ async def run_agent_loop(
     hypo_counter = 0                        # agent-proposed: H1, H2, ...
     report_steps: list[dict] = []           # collected for final report
     last_call: tuple = None                 # (action, params_json) of previous step
+    once_only_called: set = set()           # tools that may only be called once per run
+    _ONCE_ONLY = {"cross_dataset_de"}       # tools restricted to a single call per run
 
     yield {"type": "mode", "mode": "reproduce" if temperature == 0.0 else "explore", "temperature": temperature}
     yield {"type": "seed", "text": f"Pre-analysis: {len(seeds)} seed hypotheses generated", "summary": seed_summary}
@@ -293,6 +295,16 @@ async def run_agent_loop(
         action = dec.get("action", "")
         params = dec.get("params", {})
         hypo_action = dec.get("hypothesis_action")
+
+        # Guard: reject tools that may only be called once per run
+        if action in _ONCE_ONLY and action in once_only_called:
+            logger.warning("Once-only tool [%s] called again at step %d — blocking", action, step_num)
+            messages.append({"role": "assistant", "content": raw})
+            messages.append({"role": "user", "content": (
+                f"CRITICAL ERROR: '{action}' may only be called once per run and has already been called. "
+                "Use a different tool to continue the analysis."
+            )})
+            continue
 
         # Guard: reject identical tool call repeated from the previous step
         current_call = (action, json.dumps(params, sort_keys=True, default=str))
@@ -421,6 +433,8 @@ async def run_agent_loop(
             }
         report_steps.append(step_record)
         last_call = current_call
+        if action in _ONCE_ONLY:
+            once_only_called.add(action)
 
         messages.append({"role": "assistant", "content": raw})
         result_str = json.dumps(result, default=str)[:2500] if result is not None else "null"
