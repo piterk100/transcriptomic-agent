@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { flushSync } from "react-dom";
 import DatasetSlot from "./components/DatasetSlot";
 import LogEntry from "./components/LogEntry";
-import { setGroupMappings } from "./api";
+import { setGroupMappings, uploadDegDataset } from "./api";
 
 const STYLES = `
   @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&family=Syne:wght@700;800&display=swap');
@@ -55,6 +55,13 @@ export default function App() {
   // mappingGroups: [{ canonical: string, aliases: Set<string> }]
   const [mappingGroups, setMappingGroups] = useState([]);
   const [mappingsOpen, setMappingsOpen] = useState(false);
+  // DEG upload state
+  const [degDatasets,  setDegDatasets]  = useState([]);  // confirmed uploads
+  const [degFile,      setDegFile]      = useState(null);
+  const [degName,      setDegName]      = useState("DEG Dataset");
+  const [degGroupA,    setDegGroupA]    = useState("");
+  const [degGroupB,    setDegGroupB]    = useState("");
+  const [degUploading, setDegUploading] = useState(false);
   const logEnd   = useRef(null);
   const abortRef = useRef(null);
 
@@ -125,6 +132,26 @@ export default function App() {
     newLoaded.forEach(d => { m[d.id] = d.group_col; });
     setGroupMap(m);
     setMappingsOpen(newLoaded.length >= 2);
+  };
+
+  const uploadDeg = async () => {
+    if (!degFile || !degGroupA.trim() || !degGroupB.trim()) return;
+    setDegUploading(true);
+    try {
+      const res = await uploadDegDataset(degFile, degName, degGroupA.trim(), degGroupB.trim());
+      if (res.error) { addLog({ type: "error", text: `DEG upload: ${res.error}` }); return; }
+      setDegDatasets(prev => {
+        const filtered = prev.filter(d => !(d.name === res.name));
+        return [...filtered, res];
+      });
+      setDegFile(null);
+      setDegGroupA("");
+      setDegGroupB("");
+    } catch (e) {
+      addLog({ type: "error", text: `DEG upload: ${e.message}` });
+    } finally {
+      setDegUploading(false);
+    }
   };
 
   const runAgent = async () => {
@@ -210,6 +237,36 @@ export default function App() {
           <button className="btn" style={{ marginBottom: 12 }} onClick={loadAll} disabled={!slots.some(s => s.exprFile && s.metaFile)}>
             LOAD DATA
           </button>
+
+          {/* DEG TABLE UPLOAD */}
+          <div className="sec">// DEG DATASETS</div>
+          <div style={{ marginBottom: 10 }}>
+            <label className="uz" style={{ marginBottom: 6, fontSize: 13 }}>
+              {degFile ? degFile.name : "Upload DEG table (.csv)"}
+              <input type="file" accept=".csv" style={{ display: "none" }} onChange={e => setDegFile(e.target.files[0] || null)} />
+            </label>
+            <input type="text" value={degName} onChange={e => setDegName(e.target.value)}
+              placeholder="Dataset name" style={{ marginBottom: 5 }} />
+            <input type="text" value={degGroupA} onChange={e => setDegGroupA(e.target.value)}
+              placeholder="groupA (e.g. endometriosis)" style={{ marginBottom: 5 }} />
+            <input type="text" value={degGroupB} onChange={e => setDegGroupB(e.target.value)}
+              placeholder="groupB (e.g. normal)" style={{ marginBottom: 6 }} />
+            <button className="btn bsm" style={{ width: "100%", marginBottom: 8 }}
+              onClick={uploadDeg}
+              disabled={!degFile || !degGroupA.trim() || !degGroupB.trim() || degUploading}>
+              {degUploading ? "UPLOADING..." : "UPLOAD DEG TABLE"}
+            </button>
+            {degDatasets.map(d => (
+              <div key={d.name} style={{ marginBottom: 6, padding: "6px 8px", border: "1px solid #223a28", background: "#0b0c0f", fontSize: 12 }}>
+                <div style={{ color: "#3dcc7a", fontWeight: 600, marginBottom: 3 }}>{d.name}</div>
+                {d.comparisons.map((c, i) => (
+                  <div key={i} style={{ color: "#3a6a4a", lineHeight: 1.6 }}>
+                    ▸ {c.groupA} vs {c.groupB} <span style={{ color: "#2a5a3a" }}>({c.n_genes} genes)</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
 
           {loaded.length > 0 && <>
             <div className="sec">// GROUP COLUMNS</div>

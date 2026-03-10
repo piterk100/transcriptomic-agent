@@ -39,7 +39,8 @@ def _mwu_cross(expr_a_vals: np.ndarray, expr_b_vals: np.ndarray):
     return U, p_vals
 
 
-def cross_dataset_de(datasets, groupA=None, groupB=None, mappings=None, topN=30, min_effect_size=0.5, **_):
+def cross_dataset_de(datasets, groupA=None, groupB=None, deg_datasets=None,
+                     mappings=None, topN=30, min_effect_size=0.5, **_):
     """
     Cross-dataset DE using Mann-Whitney U with:
     - per-dataset BH correction (controls within-dataset FDR)
@@ -47,10 +48,11 @@ def cross_dataset_de(datasets, groupA=None, groupB=None, mappings=None, topN=30,
     - global BH correction on Fisher's combined p-values
     - effect size filter: genes with avg |logFC| < min_effect_size are excluded after
       directional consistency check (reported in n_filtered_by_effect_size)
+    Also integrates pre-computed DEG tables (deg_datasets) into the Fisher meta-analysis.
     """
     mappings = mappings or {}
-    per_ds: dict[str, dict] = {}  # gene → {ds_name → {logFC, rbc, p, adj_p}}
-    used = []
+    per_ds: dict[str, dict] = {}  # gene → {source_name → {logFC, rbc, p, adj_p}}
+    used = []  # raw dataset names that matched
 
     for ds in datasets:
         expr = ds["expr"]
@@ -81,18 +83,49 @@ def cross_dataset_de(datasets, groupA=None, groupB=None, mappings=None, topN=30,
                 "adj_p": float(adj_p[i]),
             }
 
-    if not used:
+    # Integrate pre-computed DEG tables
+    deg_used = []
+    for ds_name, ds in (deg_datasets or {}).items():
+        for comp in ds["comparisons"]:
+            a = resolve_group(comp["groupA"], mappings)
+            b = resolve_group(comp["groupB"], mappings)
+            if a == groupA and b == groupB:
+                direction = 1
+            elif a == groupB and b == groupA:
+                direction = -1
+            else:
+                continue
+            df = comp["df"]
+            deg_used.append(ds_name)
+            for gene, row in df.iterrows():
+                if gene not in per_ds:
+                    per_ds[gene] = {}
+                per_ds[gene][ds_name] = {
+                    "logFC": float(row["logFC"]) * direction,
+                    "rbc":   None,
+                    "p":     float(row["p"]),
+                    "adj_p": float(row["adj_p"]),
+                }
+
+    all_sources = used + deg_used
+    if not all_sources:
         return {"error": f"No datasets found with groups {groupA}, {groupB}"}
 
-    common = [g for g, dm in per_ds.items() if len(dm) == len(used)]
+    # Genes must be present in all raw datasets (DEG data is supplemental)
+    if used:
+        common = [g for g, dm in per_ds.items() if all(d in dm for d in used)]
+    else:
+        common = list(per_ds.keys())
 
-    # Build candidates: directionally consistent + minimum effect size across all datasets
+    # Build candidates: directionally consistent + minimum effect size
     n_directionally_inconsistent = 0
     n_below_effect_size = 0
     fisher_genes, fisher_ps, entries = [], [], []
     for gene in common:
         dm = per_ds[gene]
-        lfcs = [dm[d]["logFC"] for d in used]
+        # Use all available sources for this gene
+        gene_sources = [s for s in all_sources if s in dm]
+        lfcs = [dm[s]["logFC"] for s in gene_sources]
         if not (all(x > 0 for x in lfcs) or all(x < 0 for x in lfcs)):
             n_directionally_inconsistent += 1
             continue
@@ -100,10 +133,10 @@ def cross_dataset_de(datasets, groupA=None, groupB=None, mappings=None, topN=30,
         if avg_abs_lfc < min_effect_size:
             n_below_effect_size += 1
             continue
-        # Fisher's combined p-value (meta-analysis of per-dataset raw p-values)
-        ps_clipped = np.clip([dm[d]["p"] for d in used], 1e-300, 1.0)
+        # Fisher's combined p-value (meta-analysis of per-source raw p-values)
+        ps_clipped = np.clip([dm[s]["p"] for s in gene_sources], 1e-300, 1.0)
         chi2_stat = -2.0 * np.sum(np.log(ps_clipped))
-        fisher_p = float(_chi2.sf(chi2_stat, df=2 * len(used)))
+        fisher_p = float(_chi2.sf(chi2_stat, df=2 * len(gene_sources)))
         fisher_genes.append(gene)
         fisher_ps.append(fisher_p)
         entries.append({
@@ -111,14 +144,14 @@ def cross_dataset_de(datasets, groupA=None, groupB=None, mappings=None, topN=30,
             "direction": "UP" if lfcs[0] > 0 else "DOWN",
             "avg_abs_logFC": round(avg_abs_lfc, 3),
             "fisher_p": fisher_p,
-            "n_sig_datasets": sum(1 for d in used if dm[d]["adj_p"] < 0.05),
-            "n_datasets": len(used),
+            "n_sig_datasets": sum(1 for s in gene_sources if (dm[s]["adj_p"] or 1.0) < 0.05),
+            "n_datasets": len(gene_sources),
             "per_dataset": [{
-                "dataset": d,
-                "logFC": round(dm[d]["logFC"], 3),
-                "rbc":   round(dm[d]["rbc"], 3),
-                "adj_p": round(dm[d]["adj_p"], 4),
-            } for d in used],
+                "dataset": s,
+                "logFC": round(dm[s]["logFC"], 3),
+                "rbc":   round(dm[s]["rbc"], 3) if dm[s]["rbc"] is not None else None,
+                "adj_p": round(dm[s]["adj_p"], 4) if dm[s]["adj_p"] is not None else None,
+            } for s in gene_sources],
         })
 
     # Global BH correction on Fisher's combined p-values
@@ -130,7 +163,9 @@ def cross_dataset_de(datasets, groupA=None, groupB=None, mappings=None, topN=30,
         entries.sort(key=lambda x: (x["fisher_adj_p"], -x["avg_abs_logFC"]))
 
     return {
-        "datasets_used": used,
+        "datasets_used": all_sources,
+        "raw_datasets_used": used,
+        "deg_datasets_used": deg_used,
         "comparison": f"{groupA} vs {groupB}",
         "test": "Mann-Whitney U (per-dataset BH) + Fisher meta-analysis (global BH)",
         "n_consistent_genes": len(entries),

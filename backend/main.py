@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 load_dotenv()
 
+import io
 import json
 import logging
 import os
@@ -39,6 +40,9 @@ app.add_middleware(
 
 # In-memory dataset store: dataset_id → dataset dict
 _datasets: dict[str, dict] = {}
+
+# Pre-computed DEG table store: dataset_name → { name, type, comparisons[] }
+deg_store: dict = {}
 
 # Group name mappings: { "canonical_name": ["alias1", "alias2", ...] }
 # Example: { "normal": ["Endometrium-Normal", "normal endometrium"] }
@@ -168,6 +172,97 @@ async def upload_dataset(
     }
 
 
+_DEG_GENE_ALIASES   = {"gene", "gene_symbol", "gene_name", "id", "geneid"}
+_DEG_LOGFC_ALIASES  = {"logfc", "log2fc", "log2foldchange", "logfoldchange", "lfc"}
+_DEG_P_ALIASES      = {"p", "pvalue", "p_value", "pval"}
+_DEG_ADJP_ALIASES   = {"adj_p", "padj", "adj_p_val", "p_adj", "fdr", "q_value", "qvalue"}
+
+
+def _norm_col(name: str) -> str:
+    return name.lower().replace(".", "_").replace(" ", "_")
+
+
+@app.post("/api/datasets/upload_deg")
+async def upload_deg(
+    file: UploadFile = File(...),
+    name: str = Form(...),
+    groupA: str = Form(...),
+    groupB: str = Form(...),
+):
+    """
+    Upload a pre-computed DEG table CSV.
+    Required columns (auto-detected, case-insensitive):
+      - gene / gene_symbol / gene_name / id
+      - logFC / log2FC / log2FoldChange / logfoldchange
+      - p / pvalue / p_value / pval
+      - adj_p / padj / adj.p / p_adj / fdr / q_value
+    groupA and groupB are the canonical group names (matching group_mappings).
+    """
+    content = await file.read()
+    df = pd.read_csv(io.BytesIO(content))
+
+    col_map: dict[str, str] = {}
+    for col in df.columns:
+        cl = _norm_col(col)
+        if cl in _DEG_GENE_ALIASES:
+            col_map.setdefault("gene", col)
+        elif cl in _DEG_LOGFC_ALIASES:
+            col_map.setdefault("logFC", col)
+        elif cl in _DEG_P_ALIASES:
+            col_map.setdefault("p", col)
+        elif cl in _DEG_ADJP_ALIASES:
+            col_map.setdefault("adj_p", col)
+
+    missing = [k for k in ["gene", "logFC", "p", "adj_p"] if k not in col_map]
+    if missing:
+        raise HTTPException(
+            400,
+            f"Could not detect columns: {missing}. Found columns: {df.columns.tolist()}",
+        )
+
+    df = df.rename(columns={v: k for k, v in col_map.items()})
+    df = df[["gene", "logFC", "p", "adj_p"]].dropna()
+    df["gene"] = df["gene"].astype(str).str.strip().str.upper()
+    df = df.set_index("gene")
+
+    if name not in deg_store:
+        deg_store[name] = {"name": name, "type": "deg", "comparisons": []}
+
+    # Remove existing entry for same groupA/groupB if present
+    deg_store[name]["comparisons"] = [
+        c for c in deg_store[name]["comparisons"]
+        if not (c["groupA"] == groupA and c["groupB"] == groupB)
+    ]
+    deg_store[name]["comparisons"].append({"groupA": groupA, "groupB": groupB, "df": df})
+
+    return {
+        "name": name,
+        "type": "deg",
+        "n_genes": len(df),
+        "groupA": groupA,
+        "groupB": groupB,
+        "comparisons": [
+            {"groupA": c["groupA"], "groupB": c["groupB"], "n_genes": len(c["df"])}
+            for c in deg_store[name]["comparisons"]
+        ],
+    }
+
+
+@app.get("/api/datasets/deg")
+async def list_deg_datasets():
+    return {
+        name: {
+            "name": name,
+            "type": "deg",
+            "comparisons": [
+                {"groupA": c["groupA"], "groupB": c["groupB"], "n_genes": len(c["df"])}
+                for c in ds["comparisons"]
+            ],
+        }
+        for name, ds in deg_store.items()
+    }
+
+
 class RunRequest(BaseModel):
     dataset_ids: list[str]
     group_cols: dict[str, str]  # dataset_id → chosen group_col
@@ -196,7 +291,7 @@ async def run_agent(req: RunRequest):
     logger.info("Run started: datasets=%s max_steps=%d mode=%s", req.dataset_ids, req.free_steps, req.mode)
 
     async def generate():
-        async for event in run_agent_loop(datasets, req.free_steps, api_key, temperature=temperature, mappings=dict(group_mappings)):
+        async for event in run_agent_loop(datasets, req.free_steps, api_key, temperature=temperature, mappings=dict(group_mappings), deg_datasets=dict(deg_store)):
             if event.get("type") == "error":
                 logger.error("Agent error: %s", event.get("text", ""))
             yield f"data: {json.dumps(event, default=str)}\n\n"

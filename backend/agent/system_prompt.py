@@ -1,8 +1,19 @@
-def build_system_prompt(datasets: list, common_genes_count: int, seed_summary: str = "") -> str:
+def build_system_prompt(datasets: list, common_genes_count: int, seed_summary: str = "", deg_datasets: dict = None) -> str:
     ds_desc = "\n".join(
         f"  • {ds['name']}: {len(ds['expr'].index)} genes, {len(ds['expr'].columns)} samples, groups: [{', '.join(ds['groups'])}]"
         for ds in datasets
     )
+
+    deg_section = ""
+    if deg_datasets:
+        lines = []
+        for name, ds in deg_datasets.items():
+            for comp in ds["comparisons"]:
+                lines.append(
+                    f"  • {name}: {comp['groupA']} vs {comp['groupB']} ({len(comp['df'])} genes)"
+                )
+        if lines:
+            deg_section = "\nDEG DATASETS (pre-computed, included automatically in cross_dataset_de meta-analysis):\n" + "\n".join(lines) + "\n"
 
     seed_section = (
         f"\n{seed_summary}\n"
@@ -16,7 +27,7 @@ def build_system_prompt(datasets: list, common_genes_count: int, seed_summary: s
 DATASETS ({len(datasets)}):
 {ds_desc}
 Common genes across all datasets: {common_genes_count}
-{seed_section}
+{deg_section}{seed_section}
 
 TOOLS — single dataset:
 - dataset_summary
@@ -25,13 +36,13 @@ TOOLS — single dataset:
 - gene_expression_by_group: {{datasetName, genes[]}}
 - nonlinear_rule: {{datasetName, geneHigh, geneLow, targetGroup}}
 - contextual_modules: {{datasetName, contextGene, topN}}
-- pathway_enrichment: {{genes[]}} — enrichment against Hallmarks/KEGG
+- pathway_enrichment: {{genes[], deg_dataset_name}} — enrichment against Hallmarks/KEGG; if deg_dataset_name is provided, significant DE genes are extracted automatically from that DEG dataset (use adj_p<0.05, |logFC|>0.5)
 - batch_detection: {{datasetName, genes[]}} — is the axis a batch artifact?
 - subgroup_discovery: {{datasetName, group}} — subgroups within a group (PCA + KMeans)
 - gene_network_hub: {{datasetName, topN, corrThreshold}} — co-expression network hubs
 
 TOOLS — cross-dataset (PRIORITIZE):
-- cross_dataset_de: {{groupA, groupB, topN}}
+- cross_dataset_de: {{groupA, groupB, topN}} — automatically includes any uploaded DEG datasets matching the comparison
 - cross_dataset_correlation: {{genes[]}}
 - invariant_axis: {{groupA, groupB, topN}}
 - cross_dataset_rewiring: {{gene1, gene2}}

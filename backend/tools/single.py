@@ -244,13 +244,28 @@ def contextual_modules(datasets, datasetName=None, contextGene=None, topN=20, **
     }
 
 
-def pathway_enrichment(datasets: dict, genes: list = None, **_) -> dict:
+def pathway_enrichment(datasets: dict, genes: list = None, deg_datasets: dict = None,
+                       deg_dataset_name: str = None, adj_p_threshold: float = 0.05,
+                       logfc_threshold: float = 0.5, **_) -> dict:
     """
     Hypergeometric test + BH correction against gene sets from local GMT file.
     GMT file path must be set via GMT_FILE environment variable.
+    If deg_dataset_name is provided, significant DE genes are extracted automatically
+    from that DEG dataset (adj_p < adj_p_threshold and |logFC| > logfc_threshold).
     """
     from scipy.stats import hypergeom
     import pandas as pd
+
+    # Extract genes from a DEG dataset if requested
+    if deg_dataset_name and deg_datasets and deg_dataset_name in deg_datasets:
+        ds = deg_datasets[deg_dataset_name]
+        extracted = []
+        for comp in ds["comparisons"]:
+            df = comp["df"]
+            sig = df[(df["adj_p"] < adj_p_threshold) & (df["logFC"].abs() > logfc_threshold)]
+            extracted.extend(sig.index.tolist())
+        if not genes:
+            genes = list(set(extracted))
 
     try:
         all_gene_sets = _load_gene_sets()
