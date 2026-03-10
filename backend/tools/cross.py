@@ -209,12 +209,17 @@ def invariant_axis(datasets, groupA=None, groupB=None, mappings=None, topN=20, *
     if len(valid_ds) < 2:
         return {"error": f"Need ≥2 datasets with groups {groupA} and {groupB}"}
 
-    # Warn when any dataset has fewer than 5 samples in either group; reduce bootstrap N
+    # Warn when any dataset has fewer than 10 samples in either group; reduce bootstrap N
     # to avoid overconfident estimates from permuting tiny groups.
     low_sample_warning = [
-        ds["name"] for ds, sA, sB in valid_ds if min(len(sA), len(sB)) < 5
+        ds["name"] for ds, sA, sB in valid_ds if min(len(sA), len(sB)) < 10
     ]
     N_BOOT = 100 if low_sample_warning else 500
+    low_sample_warning_message = (
+        f"Warning: datasets {low_sample_warning} have fewer than 10 samples in at least one group. "
+        "Results may be unreliable."
+        if low_sample_warning else ""
+    )
 
     gene_scores = []
     for gene in common:
@@ -292,6 +297,7 @@ def invariant_axis(datasets, groupA=None, groupB=None, mappings=None, topN=20, *
         "comparison": f"{groupA} vs {groupB}",
         "n_datasets": len(valid_ds),
         "low_sample_warning": low_sample_warning,
+        "low_sample_warning_message": low_sample_warning_message,
         "axis_consistent_in": f"{n_sig}/{len(valid_ds)} datasets",
         "n_bootstrap_validated": f"{n_boot_sig}/5 top genes (p_boot<0.01, Bonferroni)",
         "top_invariant_genes": gene_scores[:topN],

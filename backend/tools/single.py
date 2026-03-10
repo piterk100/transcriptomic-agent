@@ -399,6 +399,37 @@ def subgroup_discovery(datasets, datasetName=None, group=None, **_):
     except Exception:
         sil_score = 0.0
 
+    # Silhouette stability: 10 runs with different random seeds on full data
+    sil_runs = []
+    for seed in range(10):
+        try:
+            km_r = KMeans(n_clusters=2, random_state=seed, n_init=10)
+            lbl_r = km_r.fit_predict(pca_coords)
+            if len(np.unique(lbl_r)) == 2:
+                sil_runs.append(float(_silhouette_score(pca_coords, lbl_r)))
+        except Exception:
+            pass
+    silhouette_mean = round(float(np.mean(sil_runs)), 3) if sil_runs else sil_score
+    silhouette_std = round(float(np.std(sil_runs)), 3) if sil_runs else 0.0
+    silhouette_stable = bool(silhouette_std < 0.05)
+
+    # Subsample stability: 10 runs on 80% random subsamples
+    rng_sub = np.random.default_rng(0)
+    sil_sub_runs = []
+    n_sub = max(4, int(0.8 * len(samples)))
+    for _ in range(10):
+        idx = rng_sub.choice(len(samples), size=n_sub, replace=False)
+        sub_coords = pca_coords[idx]
+        try:
+            km_s = KMeans(n_clusters=2, random_state=42, n_init=10)
+            lbl_s = km_s.fit_predict(sub_coords)
+            if len(np.unique(lbl_s)) == 2:
+                sil_sub_runs.append(float(_silhouette_score(sub_coords, lbl_s)))
+        except Exception:
+            pass
+    silhouette_subsample_mean = round(float(np.mean(sil_sub_runs)), 3) if sil_sub_runs else sil_score
+    silhouette_subsample_std = round(float(np.std(sil_sub_runs)), 3) if sil_sub_runs else 0.0
+
     sub1 = [samples[i] for i, l in enumerate(labels) if l == 0]
     sub2 = [samples[i] for i, l in enumerate(labels) if l == 1]
 
@@ -433,6 +464,11 @@ def subgroup_discovery(datasets, datasetName=None, group=None, **_):
         "subgroup_1": {"n": len(sub1), "samples": sub1},
         "subgroup_2": {"n": len(sub2), "samples": sub2},
         "silhouette_score": sil_score,
+        "silhouette_mean": silhouette_mean,
+        "silhouette_std": silhouette_std,
+        "silhouette_stable": silhouette_stable,
+        "silhouette_subsample_mean": silhouette_subsample_mean,
+        "silhouette_subsample_std": silhouette_subsample_std,
         "n_significant_markers": len(sig_markers),
         "top_markers_sub1": [m for m in sig_markers if m["logFC"] > 0][:10],
         "top_markers_sub2": [m for m in sig_markers if m["logFC"] < 0][:10],
