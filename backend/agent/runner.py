@@ -228,7 +228,7 @@ async def run_agent_loop(
     _ONCE_ONLY = {"cross_dataset_de"}       # tools restricted to a single call per run
     # When no raw expression datasets are loaded, only DEG-compatible tools may run
     _deg_only = len(datasets) == 0 and bool(deg_datasets)
-    _DEG_ONLY_ALLOWED = {"cross_dataset_de", "pathway_enrichment", "DONE"} | DEG_TOOL_NAMES
+    _DEG_ONLY_ALLOWED = {"cross_dataset_de", "pathway_enrichment", "execute_code", "DONE"} | DEG_TOOL_NAMES
 
     yield {"type": "mode", "mode": "reproduce" if temperature == 0.0 else "explore", "temperature": temperature}
     yield {"type": "seed", "text": f"Pre-analysis: {len(seeds)} seed hypotheses generated", "summary": seed_summary}
