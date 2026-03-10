@@ -30,7 +30,7 @@ DATASETS ({len(datasets)}):
 Common genes across all datasets: {common_genes_count}
 {deg_section}{seed_section}
 
-{"⚠ DEG-ONLY MODE: No raw expression matrices are loaded. ONLY the following tools are available: cross_dataset_de, pathway_enrichment, DONE. Do NOT call any other tool — it will be rejected." if deg_only else "TOOLS — single dataset:"}
+{"⚠ DEG-ONLY MODE — only pre-computed DEG tables loaded. Single-dataset tools and network/correlation tools requiring raw expression matrices are not available." if deg_only else "TOOLS — single dataset:"}
 {"" if deg_only else """- dataset_summary
 - top_variable_genes: {datasetName, n}
 - differential_expression: {datasetName, groupA, groupB, topN}
@@ -48,6 +48,12 @@ Common genes across all datasets: {common_genes_count}
 {"" if deg_only else """- cross_dataset_correlation: {genes[]}
 - invariant_axis: {groupA, groupB, topN}
 - cross_dataset_rewiring: {gene1, gene2}"""}
+{"" if not deg_datasets else """
+DEG TABLE TOOLS (available when DEG tables are uploaded):
+- deg_voting: {groupA, groupB, adj_p_threshold, logfc_threshold, topN} — per-gene vote count across DEG tables: frequency + direction consistency
+- deg_biomarker_ranking: {groupA, groupB, adj_p_threshold, logfc_threshold, topN} — composite score (freq × consistency × effect × significance); only genes in >=2 datasets
+- deg_cooccurrence_network: {groupA, groupB, min_cooccurrence, topN_genes} — gene co-occurrence network across DEG tables; min_cooccurrence filters weak edges
+- deg_direction_comparison: {comparisonA_groupA, comparisonA_groupB, comparisonB_groupA, comparisonB_groupB} — concordant/discordant genes between two comparisons"""}
 
 {"" if deg_only else """SPECIAL TOOL — execute_code:
 When no existing tool is sufficient, write your own Python code.
@@ -129,7 +135,7 @@ STATISTICAL CAUTION:
 - Large Cohen's d with n < 5 is unreliable — always note the sample size in reasoning
 - pathway_enrichment requires k >= 3 overlapping genes to be biologically meaningful
 
-{"STRATEGY (DEG-only mode):"+chr(10)+"1. Call cross_dataset_de for each comparison present in the DEG datasets"+chr(10)+"2. For confirmed/interesting DE results, call pathway_enrichment (use deg_dataset_name to auto-extract genes)"+chr(10)+"3. Evaluate hypotheses and call DONE" if deg_only else """STRATEGY:
+{"STRATEGY (DEG-only mode — adapt freely):"+chr(10)+"1. deg_voting to identify most consistently DE genes across tables"+chr(10)+"2. cross_dataset_de for meta-analysis p-values and Fisher-combined significance"+chr(10)+"3. pathway_enrichment on top ranked genes (UP and DOWN separately; use deg_dataset_name to auto-extract)"+chr(10)+"4. deg_biomarker_ranking for composite biomarker candidates"+chr(10)+"5. deg_cooccurrence_network to find hub genes appearing together across tables"+chr(10)+"6. deg_direction_comparison if multiple disease types are available"+chr(10)+"7. DONE" if deg_only else """STRATEGY:
 1. Hypotheses S1..Sn are already loaded from pre-analysis (PENDING) — start by investigating them with tools
 2. cross_dataset_de / invariant_axis → test hypothesis, then evaluate it
 3. If hypothesis confirmed → go deeper (pathway_enrichment, gene_network_hub)

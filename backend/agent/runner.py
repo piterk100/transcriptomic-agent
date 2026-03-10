@@ -70,7 +70,7 @@ def _extract_first_json_object(s: str):
 
 from ..agent.system_prompt import build_system_prompt
 from ..agent.seeder import generate_seeds, extract_evidence_stats
-from ..tools.registry import TOOLS, CROSS_TOOL_NAMES, summarize_result
+from ..tools.registry import TOOLS, CROSS_TOOL_NAMES, DEG_TOOL_NAMES, summarize_result
 from ..tools.sandbox import execute_sandbox
 
 REPORTS_DIR = "reports"
@@ -228,7 +228,7 @@ async def run_agent_loop(
     _ONCE_ONLY = {"cross_dataset_de"}       # tools restricted to a single call per run
     # When no raw expression datasets are loaded, only DEG-compatible tools may run
     _deg_only = len(datasets) == 0 and bool(deg_datasets)
-    _DEG_ONLY_ALLOWED = {"cross_dataset_de", "pathway_enrichment", "DONE"}
+    _DEG_ONLY_ALLOWED = {"cross_dataset_de", "pathway_enrichment", "DONE"} | DEG_TOOL_NAMES
 
     yield {"type": "mode", "mode": "reproduce" if temperature == 0.0 else "explore", "temperature": temperature}
     yield {"type": "seed", "text": f"Pre-analysis: {len(seeds)} seed hypotheses generated", "summary": seed_summary}
@@ -400,7 +400,10 @@ async def run_agent_loop(
                 discoveries.append({"action": action, "params": params, "summary": summary, "result": result})
                 yield {
                     "type": "result", "action": action, "params": params, "result": result,
-                    "summary": summary, "isCross": action in CROSS_TOOL_NAMES, "isDynamic": False,
+                    "summary": summary,
+                    "isCross": action in CROSS_TOOL_NAMES,
+                    "isDeg": action in DEG_TOOL_NAMES,
+                    "isDynamic": False,
                 }
             except Exception as e:
                 logger.error("Tool error [%s] at step %d: %s", action, step_num, e, exc_info=True)

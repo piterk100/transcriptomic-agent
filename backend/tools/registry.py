@@ -6,6 +6,9 @@ from .single import (
 from .cross import (
     cross_dataset_de, cross_dataset_correlation, invariant_axis, cross_dataset_rewiring,
 )
+from .deg import (
+    deg_voting, deg_cooccurrence_network, deg_biomarker_ranking, deg_direction_comparison,
+)
 
 TOOLS = {
     "dataset_summary":           dataset_summary,
@@ -22,10 +25,18 @@ TOOLS = {
     "cross_dataset_correlation": cross_dataset_correlation,
     "invariant_axis":            invariant_axis,
     "cross_dataset_rewiring":    cross_dataset_rewiring,
+    "deg_voting":                deg_voting,
+    "deg_cooccurrence_network":  deg_cooccurrence_network,
+    "deg_biomarker_ranking":     deg_biomarker_ranking,
+    "deg_direction_comparison":  deg_direction_comparison,
 }
 
 CROSS_TOOL_NAMES = {
     "cross_dataset_de", "cross_dataset_correlation", "invariant_axis", "cross_dataset_rewiring"
+}
+
+DEG_TOOL_NAMES = {
+    "deg_voting", "deg_cooccurrence_network", "deg_biomarker_ranking", "deg_direction_comparison",
 }
 
 
@@ -48,6 +59,10 @@ def summarize_result(action: str, r: dict) -> str:
             "cross_dataset_correlation": lambda: f"replikacja min={r['min_replication']} | {r['interpretation']}",
             "invariant_axis":            lambda: f"inwariantna w {r['axis_consistent_in']} | {r['interpretation']}",
             "cross_dataset_rewiring":    lambda: f"{r['gene_pair']}: Δr={r['rewiring_magnitude']} | {r['interpretation']}",
+            "deg_voting":                lambda: r["interpretation"],
+            "deg_cooccurrence_network":  lambda: r["interpretation"],
+            "deg_biomarker_ranking":     lambda: r["interpretation"],
+            "deg_direction_comparison":  lambda: r["interpretation"],
         }
         return m[action]() if action in m else str(r)[:80]
     except Exception:
