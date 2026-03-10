@@ -4,6 +4,7 @@ def build_system_prompt(datasets: list, common_genes_count: int, seed_summary: s
         for ds in datasets
     )
 
+    deg_only = len(datasets) == 0 and bool(deg_datasets)
     deg_section = ""
     if deg_datasets:
         lines = []
@@ -29,32 +30,33 @@ DATASETS ({len(datasets)}):
 Common genes across all datasets: {common_genes_count}
 {deg_section}{seed_section}
 
-TOOLS — single dataset:
-- dataset_summary
-- top_variable_genes: {{datasetName, n}}
-- differential_expression: {{datasetName, groupA, groupB, topN}}
-- gene_expression_by_group: {{datasetName, genes[]}}
-- nonlinear_rule: {{datasetName, geneHigh, geneLow, targetGroup}}
-- contextual_modules: {{datasetName, contextGene, topN}}
-- pathway_enrichment: {{genes[], deg_dataset_name}} — enrichment against Hallmarks/KEGG; if deg_dataset_name is provided, significant DE genes are extracted automatically from that DEG dataset (use adj_p<0.05, |logFC|>0.5)
-- batch_detection: {{datasetName, genes[]}} — is the axis a batch artifact?
-- subgroup_discovery: {{datasetName, group}} — subgroups within a group (PCA + KMeans)
-- gene_network_hub: {{datasetName, topN, corrThreshold}} — co-expression network hubs
+{"⚠ DEG-ONLY MODE: No raw expression matrices are loaded. ONLY the following tools are available: cross_dataset_de, pathway_enrichment, DONE. Do NOT call any other tool — it will be rejected." if deg_only else "TOOLS — single dataset:"}
+{"" if deg_only else """- dataset_summary
+- top_variable_genes: {datasetName, n}
+- differential_expression: {datasetName, groupA, groupB, topN}
+- gene_expression_by_group: {datasetName, genes[]}
+- nonlinear_rule: {datasetName, geneHigh, geneLow, targetGroup}
+- contextual_modules: {datasetName, contextGene, topN}
+- pathway_enrichment: {genes[], deg_dataset_name} — enrichment against Hallmarks/KEGG; if deg_dataset_name is provided, significant DE genes are extracted automatically from that DEG dataset (use adj_p<0.05, |logFC|>0.5)
+- batch_detection: {datasetName, genes[]} — is the axis a batch artifact?
+- subgroup_discovery: {datasetName, group} — subgroups within a group (PCA + KMeans)
+- gene_network_hub: {datasetName, topN, corrThreshold} — co-expression network hubs"""}
 
-TOOLS — cross-dataset (PRIORITIZE):
+{"TOOLS — available:" if deg_only else "TOOLS — cross-dataset (PRIORITIZE):"}
 - cross_dataset_de: {{groupA, groupB, topN}} — automatically includes any uploaded DEG datasets matching the comparison
-- cross_dataset_correlation: {{genes[]}}
-- invariant_axis: {{groupA, groupB, topN}}
-- cross_dataset_rewiring: {{gene1, gene2}}
+- pathway_enrichment: {{genes[], deg_dataset_name}} — enrichment against Hallmarks/KEGG; use deg_dataset_name to auto-extract significant genes from a DEG dataset
+{"" if deg_only else """- cross_dataset_correlation: {genes[]}
+- invariant_axis: {groupA, groupB, topN}
+- cross_dataset_rewiring: {gene1, gene2}"""}
 
-SPECIAL TOOL — execute_code:
+{"" if deg_only else """SPECIAL TOOL — execute_code:
 When no existing tool is sufficient, write your own Python code.
 Available variables: datasets[], np (numpy), pd (pandas), stats (scipy.stats)
 Each element of datasets[] is a dict: ds['name'], ds['expr'] (DataFrame genes x samples), ds['meta'] (DataFrame samples x columns), ds['group_col'], ds['groups']
-REQUIRED: set result = {{"key": value, ...}} at the end of your code
+REQUIRED: set result = {"key": value, ...} at the end of your code
 
 The entire Python code must go inside the "code" string in params. Example JSON:
-{{"action":"execute_code","params":{{"code":"ds = datasets[0]\\nexpr = ds['expr']\\nresult = {{'n_genes': len(expr)}}"}},"hypothesis_action":null,"thought":"..."}}
+{"action":"execute_code","params":{"code":"ds = datasets[0]\\nexpr = ds['expr']\\nresult = {'n_genes': len(expr)}"},"hypothesis_action":null,"thought":"..."}
 
 Longer example of the code string content:
 ds = datasets[0]
@@ -64,7 +66,8 @@ g0 = expr.columns[groups == ds['groups'][0]]
 g1 = expr.columns[groups == ds['groups'][1]]
 top_gene = expr.var(axis=1).idxmax()
 corr = float(np.corrcoef(expr.loc[top_gene, g0], expr.loc[top_gene, g1])[0,1]) if len(g0) > 1 and len(g1) > 1 else 0.0
-result = {{"gene": top_gene, "inter_group_corr": corr}}
+result = {"gene": top_gene, "inter_group_corr": corr}
+"""}
 
 HYPOTHESIS SYSTEM:
 Manage hypotheses via the hypothesis_action field:
@@ -126,7 +129,7 @@ STATISTICAL CAUTION:
 - Large Cohen's d with n < 5 is unreliable — always note the sample size in reasoning
 - pathway_enrichment requires k >= 3 overlapping genes to be biologically meaningful
 
-STRATEGY:
+{"STRATEGY (DEG-only mode):"+chr(10)+"1. Call cross_dataset_de for each comparison present in the DEG datasets"+chr(10)+"2. For confirmed/interesting DE results, call pathway_enrichment (use deg_dataset_name to auto-extract genes)"+chr(10)+"3. Evaluate hypotheses and call DONE" if deg_only else """STRATEGY:
 1. Hypotheses S1..Sn are already loaded from pre-analysis (PENDING) — start by investigating them with tools
 2. cross_dataset_de / invariant_axis → test hypothesis, then evaluate it
 3. If hypothesis confirmed → go deeper (pathway_enrichment, gene_network_hub)
@@ -134,6 +137,6 @@ STRATEGY:
 5. batch_detection for discovered axes
 6. subgroup_discovery for interesting groups
 7. execute_code when you need something custom
-8. Each step should follow logically from the previous — do not repeat the same parameters
+8. Each step should follow logically from the previous — do not repeat the same parameters"""}
 
 END: {{"action":"DONE","params":{{}},"hypothesis_action":null,"thought":"summary of discoveries and hypothesis evaluations"}}"""

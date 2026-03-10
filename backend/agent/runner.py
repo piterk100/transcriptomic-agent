@@ -226,6 +226,9 @@ async def run_agent_loop(
     last_call: tuple = None                 # (action, params_json) of previous step
     once_only_called: set = set()           # tools that may only be called once per run
     _ONCE_ONLY = {"cross_dataset_de"}       # tools restricted to a single call per run
+    # When no raw expression datasets are loaded, only DEG-compatible tools may run
+    _deg_only = len(datasets) == 0 and bool(deg_datasets)
+    _DEG_ONLY_ALLOWED = {"cross_dataset_de", "pathway_enrichment", "DONE"}
 
     yield {"type": "mode", "mode": "reproduce" if temperature == 0.0 else "explore", "temperature": temperature}
     yield {"type": "seed", "text": f"Pre-analysis: {len(seeds)} seed hypotheses generated", "summary": seed_summary}
@@ -363,6 +366,17 @@ async def run_agent_loop(
         if thought:
             yield {"type": "thought", "text": thought}
         await asyncio.sleep(0)  # flush thought before running tool
+
+        # Guard: DEG-only mode — block tools that require raw expression data
+        if _deg_only and action not in _DEG_ONLY_ALLOWED:
+            logger.warning("DEG-only mode: blocked tool [%s] at step %d", action, step_num)
+            messages.append({"role": "assistant", "content": raw})
+            messages.append({"role": "user", "content": (
+                f"ERROR: No raw expression datasets are loaded. "
+                f"Only cross_dataset_de and pathway_enrichment are available in DEG-only mode. "
+                f"'{action}' requires a raw expression matrix and cannot be used."
+            )})
+            continue
 
         result = None
         if action == "execute_code":
