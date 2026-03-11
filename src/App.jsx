@@ -279,13 +279,6 @@ export default function App() {
                     <span style={{ color: "#2a6a3a", marginLeft: 6 }}>{c.n_genes} genes</span>
                   </div>
                 ))}
-                {d.detected_columns && (
-                  <div style={{ fontSize: 11, color: "#2a4a3a", marginTop: 4, lineHeight: 1.6 }}>
-                    {Object.entries(d.detected_columns).map(([k, v]) => (
-                      <span key={k} style={{ marginRight: 8 }}>{k}:{v}</span>
-                    ))}
-                  </div>
-                )}
               </div>
             ))}
           </div>
