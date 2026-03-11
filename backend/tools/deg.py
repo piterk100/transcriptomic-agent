@@ -208,7 +208,7 @@ def deg_biomarker_ranking(datasets: list, deg_datasets: dict = None,
 
     results = []
     for gene, stats in gene_stats.items():
-        if len(stats) < 2:
+        if len(stats) < 1:
             continue
         logfcs = [s["logFC"] for s in stats]
         adj_ps = [s["adj_p"] for s in stats]
