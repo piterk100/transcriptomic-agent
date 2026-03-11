@@ -388,7 +388,7 @@ async def run_agent_loop(
                 messages.append({"role": "user", "content": "ERROR: execute_code requires a non-empty 'code' parameter. Please provide the Python code to execute."})
                 continue
             yield {"type": "code", "code": code}
-            result = await loop.run_in_executor(None, execute_sandbox, code, datasets)
+            result = await loop.run_in_executor(None, execute_sandbox, code, datasets, deg_datasets)
             summary = f"ERROR: {result['error']}" if isinstance(result, dict) and result.get("error") else f"Code executed: {str(result)[:80]}"
             discoveries.append({"action": action, "params": params, "summary": summary, "result": result})
             yield {"type": "result", "action": action, "params": params, "result": result, "summary": summary, "isCross": False, "isDynamic": True}

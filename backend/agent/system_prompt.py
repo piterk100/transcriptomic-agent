@@ -61,9 +61,10 @@ def build_system_prompt(datasets: list, common_genes_count: int, seed_summary: s
         execute_code_block = (
             "SPECIAL TOOL \u2014 execute_code:\n"
             "When no existing tool is sufficient, write your own Python code.\n"
-            "Available variables: datasets[], np (numpy), pd (pandas), stats (scipy.stats)\n"
+            "Available variables: datasets[], deg_datasets{}, np (numpy), pd (pandas), stats (scipy.stats)\n"
             "Each element of datasets[] is a dict: ds['name'], ds['expr'] (DataFrame genes x samples), "
             "ds['meta'] (DataFrame samples x columns), ds['group_col'], ds['groups']\n"
+            "deg_datasets is a dict: {name: {'comparisons': [{'groupA', 'groupB', 'df': DataFrame(logFC,p,adj_p)}]}}\n"
             "REQUIRED: set result = {\"key\": value, ...} at the end of your code\n"
             "\n"
             "The entire Python code must go inside the \"code\" string in params. Example JSON:\n"

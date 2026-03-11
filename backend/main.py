@@ -172,7 +172,11 @@ async def upload_dataset(
     }
 
 
-_DEG_GENE_ALIASES   = {"gene", "gene_symbol", "gene_name", "id", "geneid"}
+_DEG_GENE_ALIASES   = {
+    "gene", "gene_symbol", "gene_name", "id", "geneid",
+    "symbol", "hgnc_symbol", "mgi_symbol", "gene_id",
+    "external_gene_name", "gene_name_", "featureid",
+}
 _DEG_LOGFC_ALIASES  = {"logfc", "log2fc", "log2foldchange", "logfoldchange", "lfc"}
 _DEG_P_ALIASES      = {"p", "pvalue", "p_value", "pval"}
 _DEG_ADJP_ALIASES   = {"adj_p", "padj", "adj_p_val", "p_adj", "fdr", "q_value", "qvalue"}
@@ -214,10 +218,26 @@ async def upload_deg(
         elif cl in _DEG_ADJP_ALIASES:
             col_map.setdefault("adj_p", col)
 
-    # Fallback: if gene column not found, use the first column (R row-names export
-    # pattern: write.csv produces "Unnamed: 0" or "" as the first column header)
+    # Fallback: if gene column not found, pick the string column whose values most
+    # resemble gene symbols (short, no spaces).  This handles both the R row-names
+    # pattern ("Unnamed: 0") and annotated tables where a SYMBOL column exists but
+    # wasn't matched by name.  If no string column qualifies, use column 0.
     if "gene" not in col_map:
-        col_map["gene"] = df.columns[0]
+        already_mapped = set(col_map.values())
+        best_col, best_score = None, -1.0
+        for col in df.columns:
+            if col in already_mapped:
+                continue
+            sample = df[col].dropna().astype(str).head(200)
+            if sample.empty:
+                continue
+            no_space = (sample.str.count(r" ") == 0).mean()   # fraction with no spaces
+            med_len  = sample.str.len().median()
+            # Gene symbols: no spaces, typically ≤15 chars
+            score = no_space - max(0, (med_len - 15) / 50)
+            if score > best_score:
+                best_score, best_col = score, col
+        col_map["gene"] = best_col if best_col is not None else df.columns[0]
 
     missing = [k for k in ["gene", "logFC", "p", "adj_p"] if k not in col_map]
     if missing:

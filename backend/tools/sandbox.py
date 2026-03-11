@@ -35,13 +35,13 @@ def _serialize(v):
 
 
 # Keys that are pre-loaded into the exec namespace — not part of agent output
-_BUILTIN_KEYS = frozenset({"datasets", "np", "pd", "stats", "__builtins__"})
+_BUILTIN_KEYS = frozenset({"datasets", "deg_datasets", "np", "pd", "stats", "__builtins__"})
 
 
-def execute_sandbox(code: str, datasets: list) -> dict:
+def execute_sandbox(code: str, datasets: list, deg_datasets: dict = None) -> dict:
     """
     Executes Python code written by the agent.
-    Available variables: datasets, np, pd, stats
+    Available variables: datasets, deg_datasets, np, pd, stats
     Code must set the `result` variable before finishing.
 
     Uses a single namespace dict for both globals and locals so that
@@ -49,6 +49,7 @@ def execute_sandbox(code: str, datasets: list) -> dict:
     """
     namespace = {
         "datasets": datasets,
+        "deg_datasets": deg_datasets or {},
         "np": np,
         "pd": pd,
         "stats": stats,
