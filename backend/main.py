@@ -179,7 +179,8 @@ _DEG_ADJP_ALIASES   = {"adj_p", "padj", "adj_p_val", "p_adj", "fdr", "q_value", 
 
 
 def _norm_col(name: str) -> str:
-    return name.lower().replace(".", "_").replace(" ", "_")
+    import re as _re
+    return _re.sub(r"[^a-z0-9]", "_", name.lower())
 
 
 @app.post("/api/datasets/upload_deg")
@@ -212,6 +213,11 @@ async def upload_deg(
             col_map.setdefault("p", col)
         elif cl in _DEG_ADJP_ALIASES:
             col_map.setdefault("adj_p", col)
+
+    # Fallback: if gene column not found, use the first column (R row-names export
+    # pattern: write.csv produces "Unnamed: 0" or "" as the first column header)
+    if "gene" not in col_map:
+        col_map["gene"] = df.columns[0]
 
     missing = [k for k in ["gene", "logFC", "p", "adj_p"] if k not in col_map]
     if missing:
