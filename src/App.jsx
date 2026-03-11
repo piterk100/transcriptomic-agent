@@ -269,13 +269,25 @@ export default function App() {
               </div>
             )}
             {degDatasets.map(d => (
-              <div key={d.name} style={{ marginBottom: 6, padding: "6px 8px", border: "1px solid #223a28", background: "#0b0c0f", fontSize: 12 }}>
-                <div style={{ color: "#3dcc7a", fontWeight: 600, marginBottom: 3 }}>{d.name}</div>
+              <div key={d.name} className="slot ok" style={{ marginBottom: 8 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                  <span style={{ fontSize: 13, color: "#4a9a6a", fontWeight: 600 }}>{d.name}</span>
+                  <button className="btn bsm bdng" style={{ padding: "2px 8px", fontSize: 11 }}
+                    onClick={() => setDegDatasets(prev => prev.filter(x => x.name !== d.name))}>✕</button>
+                </div>
                 {(d.comparisons || []).map((c, i) => (
-                  <div key={i} style={{ color: "#3a6a4a", lineHeight: 1.6 }}>
-                    ▸ {c.groupA} vs {c.groupB} <span style={{ color: "#2a5a3a" }}>({c.n_genes} genes)</span>
+                  <div key={i} style={{ fontSize: 12, color: "#3dcc7a", lineHeight: 1.8 }}>
+                    ▸ {c.groupA} <span style={{ color: "#2a5a3a" }}>vs</span> {c.groupB}
+                    <span style={{ color: "#2a6a3a", marginLeft: 6 }}>{c.n_genes} genes</span>
                   </div>
                 ))}
+                {d.detected_columns && (
+                  <div style={{ fontSize: 11, color: "#2a4a3a", marginTop: 4, lineHeight: 1.6 }}>
+                    {Object.entries(d.detected_columns).map(([k, v]) => (
+                      <span key={k} style={{ marginRight: 8 }}>{k}:{v}</span>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
