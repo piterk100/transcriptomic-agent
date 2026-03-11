@@ -159,7 +159,7 @@ export default function App() {
   };
 
   const runAgent = async () => {
-    if (!loaded.length) return;
+    if (!loaded.length && !degDatasets.length) return;
     setPhase("running"); setLog([]); setStep(0); setHypotheses([]); setCurrentStatus("Running pre-analysis..."); setStreamingText("");
 
     const controller = new AbortController();
@@ -280,7 +280,7 @@ export default function App() {
             ))}
           </div>
 
-          {loaded.length > 0 && <>
+          {(loaded.length > 0 || degDatasets.length > 0) && <>
             <div className="sec">// GROUP COLUMNS</div>
             {loaded.map(ds => (
               <div key={ds.id} style={{ marginBottom: 14 }}>
