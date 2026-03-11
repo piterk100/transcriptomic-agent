@@ -172,20 +172,6 @@ async def upload_dataset(
     }
 
 
-_DEG_GENE_ALIASES   = {
-    "gene", "gene_symbol", "gene_name", "id", "geneid",
-    "symbol", "hgnc_symbol", "mgi_symbol", "gene_id",
-    "external_gene_name", "gene_name_", "featureid",
-}
-_DEG_LOGFC_ALIASES  = {"logfc", "log2fc", "log2foldchange", "logfoldchange", "lfc"}
-_DEG_P_ALIASES      = {"p", "pvalue", "p_value", "pval"}
-_DEG_ADJP_ALIASES   = {"adj_p", "padj", "adj_p_val", "p_adj", "fdr", "q_value", "qvalue"}
-
-
-def _norm_col(name: str) -> str:
-    import re as _re
-    return _re.sub(r"[^a-z0-9]", "_", name.lower())
-
 
 @app.post("/api/datasets/upload_deg")
 async def upload_deg(
@@ -204,52 +190,61 @@ async def upload_deg(
     groupA and groupB are the canonical group names (matching group_mappings).
     """
     content = await file.read()
-    df = pd.read_csv(io.BytesIO(content))
+
+    # Read CSV — handle limma format where genes are row index
+    raw = pd.read_csv(io.BytesIO(content))
+
+    # If first column is unnamed (limma rownames exported as index), use it as gene column
+    if raw.columns[0].startswith("Unnamed:"):
+        raw = raw.rename(columns={raw.columns[0]: "gene"})
+
+    # Auto-detect columns (case-insensitive, handle dots and spaces)
+    def norm(s):
+        return s.lower().replace(".", "_").replace(" ", "_")
 
     col_map: dict[str, str] = {}
-    for col in df.columns:
-        cl = _norm_col(col)
-        if cl in _DEG_GENE_ALIASES:
-            col_map.setdefault("gene", col)
-        elif cl in _DEG_LOGFC_ALIASES:
-            col_map.setdefault("logFC", col)
-        elif cl in _DEG_P_ALIASES:
-            col_map.setdefault("p", col)
-        elif cl in _DEG_ADJP_ALIASES:
-            col_map.setdefault("adj_p", col)
+    normed = {norm(c): c for c in raw.columns}
 
-    # Fallback: if gene column not found, pick the string column whose values most
-    # resemble gene symbols (short, no spaces).  This handles both the R row-names
-    # pattern ("Unnamed: 0") and annotated tables where a SYMBOL column exists but
-    # wasn't matched by name.  If no string column qualifies, use column 0.
-    if "gene" not in col_map:
-        already_mapped = set(col_map.values())
-        best_col, best_score = None, -1.0
-        for col in df.columns:
-            if col in already_mapped:
+    # Gene column — check in priority order
+    for candidate in ["gene", "symbol", "gene_symbol", "gene_name", "id", "geneid"]:
+        if candidate in normed and "gene" not in col_map:
+            # Skip "gene_name" if "symbol" is also present (gene_name has full names)
+            if candidate == "gene_name" and "symbol" in normed:
                 continue
-            sample = df[col].dropna().astype(str).head(200)
-            if sample.empty:
-                continue
-            no_space = (sample.str.count(r" ") == 0).mean()   # fraction with no spaces
-            med_len  = sample.str.len().median()
-            # Gene symbols: no spaces, typically ≤15 chars
-            score = no_space - max(0, (med_len - 15) / 50)
-            if score > best_score:
-                best_score, best_col = score, col
-        col_map["gene"] = best_col if best_col is not None else df.columns[0]
+            col_map["gene"] = normed[candidate]
+
+    # logFC column
+    for candidate in ["logfc", "log2fc", "log2foldchange", "logfoldchange", "lfc", "log2_fold_change"]:
+        if candidate in normed and "logFC" not in col_map:
+            col_map["logFC"] = normed[candidate]
+
+    # p-value column — detect adj_p first to avoid "p" matching "padj"
+    for candidate in ["adj_p_val", "adj_p", "padj", "adj_pval", "fdr", "q_value", "qvalue", "p_adj"]:
+        if candidate in normed and "adj_p" not in col_map:
+            col_map["adj_p"] = normed[candidate]
+
+    for candidate in ["p_value", "pvalue", "pval", "p"]:
+        if candidate in normed and "p" not in col_map:
+            col_map["p"] = normed[candidate]
 
     missing = [k for k in ["gene", "logFC", "p", "adj_p"] if k not in col_map]
     if missing:
         raise HTTPException(
             400,
-            f"Could not detect columns: {missing}. Found columns: {df.columns.tolist()}",
+            f"Could not detect columns: {missing}. "
+            f"Found columns: {raw.columns.tolist()}. "
+            f"Expected: gene/symbol, logFC/log2FoldChange, p/pvalue/P.Value, "
+            f"adj_p/padj/adj.P.Val/FDR",
         )
 
-    df = df.rename(columns={v: k for k, v in col_map.items()})
+    # Standardize
+    df = raw.rename(columns={v: k for k, v in col_map.items()})
     df = df[["gene", "logFC", "p", "adj_p"]].dropna()
     df["gene"] = df["gene"].astype(str).str.strip().str.upper()
     df = df.set_index("gene")
+
+    # Remove duplicates — keep row with lowest adj_p per gene
+    df = df[~df.index.duplicated(keep="first")]
 
     if name not in deg_store:
         deg_store[name] = {"name": name, "type": "deg", "comparisons": []}
@@ -267,6 +262,7 @@ async def upload_deg(
         "n_genes": len(df),
         "groupA": groupA,
         "groupB": groupB,
+        "detected_columns": col_map,
         "comparisons": [
             {"groupA": c["groupA"], "groupB": c["groupB"], "n_genes": len(c["df"])}
             for c in deg_store[name]["comparisons"]
