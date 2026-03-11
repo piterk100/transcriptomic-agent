@@ -62,6 +62,7 @@ export default function App() {
   const [degGroupA,    setDegGroupA]    = useState("");
   const [degGroupB,    setDegGroupB]    = useState("");
   const [degUploading, setDegUploading] = useState(false);
+  const [degStatus,    setDegStatus]    = useState("");
   const logEnd   = useRef(null);
   const abortRef = useRef(null);
 
@@ -137,18 +138,21 @@ export default function App() {
   const uploadDeg = async () => {
     if (!degFile || !degGroupA.trim() || !degGroupB.trim()) return;
     setDegUploading(true);
+    setDegStatus("");
     try {
       const res = await uploadDegDataset(degFile, degName, degGroupA.trim(), degGroupB.trim());
-      if (res.error) { addLog({ type: "error", text: `DEG upload: ${res.error}` }); return; }
-      setDegDatasets(prev => {
-        const filtered = prev.filter(d => !(d.name === res.name));
-        return [...filtered, res];
-      });
+      const errMsg = res.error || res.detail;
+      if (errMsg) {
+        setDegStatus(`Error: ${errMsg}`);
+        return;
+      }
+      setDegDatasets(prev => [...prev.filter(d => d.name !== res.name), res]);
+      setDegStatus(`Uploaded: ${res.n_genes} genes (${res.groupA} vs ${res.groupB})`);
       setDegFile(null);
       setDegGroupA("");
       setDegGroupB("");
     } catch (e) {
-      addLog({ type: "error", text: `DEG upload: ${e.message}` });
+      setDegStatus(`Error: ${e.message}`);
     } finally {
       setDegUploading(false);
     }
@@ -251,11 +255,19 @@ export default function App() {
               placeholder="groupA (e.g. endometriosis)" style={{ marginBottom: 5 }} />
             <input type="text" value={degGroupB} onChange={e => setDegGroupB(e.target.value)}
               placeholder="groupB (e.g. normal)" style={{ marginBottom: 6 }} />
-            <button className="btn bsm" style={{ width: "100%", marginBottom: 8 }}
+            <button className="btn bsm" style={{ width: "100%", marginBottom: 4 }}
               onClick={uploadDeg}
               disabled={!degFile || !degGroupA.trim() || !degGroupB.trim() || degUploading}>
               {degUploading ? "UPLOADING..." : "UPLOAD DEG TABLE"}
             </button>
+            {degStatus && (
+              <div style={{ fontSize: 12, marginBottom: 8, padding: "4px 6px",
+                color: degStatus.startsWith("Error") ? "#cc5555" : "#3dcc7a",
+                border: `1px solid ${degStatus.startsWith("Error") ? "#cc555533" : "#3dcc7a33"}`,
+                background: degStatus.startsWith("Error") ? "#1a0a0a" : "#0b160f" }}>
+                {degStatus}
+              </div>
+            )}
             {degDatasets.map(d => (
               <div key={d.name} style={{ marginBottom: 6, padding: "6px 8px", border: "1px solid #223a28", background: "#0b0c0f", fontSize: 12 }}>
                 <div style={{ color: "#3dcc7a", fontWeight: 600, marginBottom: 3 }}>{d.name}</div>
