@@ -259,7 +259,7 @@ export default function App() {
             {degDatasets.map(d => (
               <div key={d.name} style={{ marginBottom: 6, padding: "6px 8px", border: "1px solid #223a28", background: "#0b0c0f", fontSize: 12 }}>
                 <div style={{ color: "#3dcc7a", fontWeight: 600, marginBottom: 3 }}>{d.name}</div>
-                {d.comparisons.map((c, i) => (
+                {(d.comparisons || []).map((c, i) => (
                   <div key={i} style={{ color: "#3a6a4a", lineHeight: 1.6 }}>
                     ▸ {c.groupA} vs {c.groupB} <span style={{ color: "#2a5a3a" }}>({c.n_genes} genes)</span>
                   </div>
@@ -288,7 +288,7 @@ export default function App() {
                       }
                     } catch {}
                   }}>
-                  {(ds.group_col_candidates || ds.group_cols.map(c => ({ col: c, unique_values: [] }))).map(cand => (
+                  {(ds.group_col_candidates || (ds.group_cols || []).map(c => ({ col: c, unique_values: [] }))).map(cand => (
                     <option key={cand.col} value={cand.col}>
                       {cand.col}: {cand.unique_values.slice(0, 3).join(", ")}
                     </option>
