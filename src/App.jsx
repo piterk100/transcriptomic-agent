@@ -136,7 +136,7 @@ export default function App() {
   };
 
   const uploadDeg = async () => {
-    if (!degFile || !degGroupA.trim() || !degGroupB.trim()) return;
+    if (!degFile || !degName.trim() || !degGroupA.trim() || !degGroupB.trim()) return;
     setDegUploading(true);
     setDegStatus("");
     try {
@@ -149,6 +149,7 @@ export default function App() {
       setDegDatasets(prev => [...prev.filter(d => d.name !== res.name), res]);
       setDegStatus(`Uploaded: ${res.n_genes} genes (${res.groupA} vs ${res.groupB})`);
       setDegFile(null);
+      setDegName("");
       setDegGroupA("");
       setDegGroupB("");
     } catch (e) {
@@ -250,14 +251,14 @@ export default function App() {
               <input type="file" accept=".csv" style={{ display: "none" }} onChange={e => setDegFile(e.target.files[0] || null)} />
             </label>
             <input type="text" value={degName} onChange={e => setDegName(e.target.value)}
-              placeholder="Dataset name" style={{ marginBottom: 5 }} />
+              placeholder="Dataset name (e.g. GSE123)" style={{ marginBottom: 5 }} />
             <input type="text" value={degGroupA} onChange={e => setDegGroupA(e.target.value)}
               placeholder="groupA (e.g. endometriosis)" style={{ marginBottom: 5 }} />
             <input type="text" value={degGroupB} onChange={e => setDegGroupB(e.target.value)}
               placeholder="groupB (e.g. normal)" style={{ marginBottom: 6 }} />
             <button className="btn bsm" style={{ width: "100%", marginBottom: 4 }}
               onClick={uploadDeg}
-              disabled={!degFile || !degGroupA.trim() || !degGroupB.trim() || degUploading}>
+              disabled={!degFile || !degName.trim() || !degGroupA.trim() || !degGroupB.trim() || degUploading}>
               {degUploading ? "UPLOADING..." : "UPLOAD DEG TABLE"}
             </button>
             {degStatus && (
