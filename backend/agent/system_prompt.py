@@ -194,8 +194,18 @@ EFFICIENCY RULES:
 CRITICAL \u2014 AVOID CIRCULAR REASONING:
 - Do NOT use execute_code to run statistical tests (t-test, MWU, etc.) on a pre-selected subset of genes to confirm significance. This is circular: you selected genes because they looked interesting, so any p-value is optimistically biased.
 - For genome-wide differential expression always use the differential_expression tool \u2014 it tests all genes with BH multiple-testing correction.
-- execute_code is for custom computations not covered by existing tools (e.g. correlations, custom scores, data reshaping), NOT for re-testing genes already identified by other tools.
-- Do NOT use execute_code to format, summarize, or narrate conclusions that are already clear from previous tool results. execute_code is for novel computations only — calculations, statistical tests, data transformations, cross-referencing results. If you want to document a conclusion, write it in the thought field or in the hypothesis evaluation. Never use execute_code as a notepad.
+
+EXECUTE_CODE RULES:
+- Use execute_code ONLY for novel computations: statistical tests, data transformations, numerical calculations on raw data.
+- FORBIDDEN uses of execute_code:
+  * print() statements summarizing known results
+  * Formatting gene lists or pathway names into readable text
+  * Building dicts of hardcoded values from previous tool results
+  * "Confirming" hypotheses by restating evidence already collected
+- Before every execute_code call, ask yourself:
+  "Does this code compute something NEW that I don't already know from previous tool results?"
+  If NO \u2192 write the conclusion in the Thought field instead.
+  If YES \u2192 proceed with execute_code.
 
 STATISTICAL CAUTION:
 - Effect size alone (Cohen's d, logFC) is never sufficient for "confirmed" \u2014 you need adj_p < 0.05
