@@ -172,6 +172,12 @@ HYPOTHESIS EVALUATION RULES:
   leave it PENDING when evidence is already collected.
 - Do not leave a hypothesis as PENDING if you already have sufficient
   evidence to evaluate it. Evaluate immediately after collecting evidence.
+- After every pathway_enrichment or execute_code call that provides evidence
+  for a pending hypothesis, you MUST immediately evaluate that hypothesis in
+  the same step. Never leave a hypothesis PENDING after evidence has been
+  collected. If evidence is sufficient (adj_p < 0.05, biologically coherent),
+  mark CONFIRMED. If contradicting, mark REJECTED. Only mark UNCERTAIN if
+  evidence is genuinely mixed.
 - CONFIRMED requires positive evidence. REJECTED requires contradicting
   evidence. UNCERTAIN means evidence is mixed or insufficient.
   PENDING means no evidence collected yet \u2014 it should not persist
