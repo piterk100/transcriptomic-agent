@@ -125,6 +125,13 @@ def deg_cooccurrence_network(datasets: list, deg_datasets: dict = None,
     if not comparisons_genes:
         return {"error": "No significant genes found in any comparison"}
 
+    low_comparisons_warning = None
+    if len(comparisons_genes) < 3:
+        low_comparisons_warning = (
+            f"Co-occurrence network requires >= 3 comparisons for meaningful results. "
+            f"Only {len(comparisons_genes)} found. Results will show trivially connected graph."
+        )
+
     edge_weights: dict = defaultdict(int)
     gene_freq: dict = defaultdict(int)
 
@@ -146,7 +153,7 @@ def deg_cooccurrence_network(datasets: list, deg_datasets: dict = None,
     top_hubs = degree.most_common(topN_genes)
     top_edges = sorted(filtered_edges.items(), key=lambda x: -x[1])[: topN_genes * 2]
 
-    return {
+    result = {
         "n_comparisons": len(comparisons_genes),
         "n_edges_total": len(filtered_edges),
         "n_hub_genes": len(degree),
@@ -158,6 +165,9 @@ def deg_cooccurrence_network(datasets: list, deg_datasets: dict = None,
             if top_hubs else "No co-occurrence network found"
         ),
     }
+    if low_comparisons_warning:
+        result["warning"] = low_comparisons_warning
+    return result
 
 
 def deg_biomarker_ranking(datasets: list, deg_datasets: dict = None,

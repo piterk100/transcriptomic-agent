@@ -92,7 +92,8 @@ def build_system_prompt(datasets: list, common_genes_count: int, seed_summary: s
             "- deg_biomarker_ranking: {groupA, groupB, adj_p_threshold, logfc_threshold, topN} \u2014 "
             "composite score (freq \u00d7 consistency \u00d7 effect \u00d7 significance); only genes in >=2 datasets\n"
             "- deg_cooccurrence_network: {groupA, groupB, min_cooccurrence, topN_genes} \u2014 "
-            "gene co-occurrence network across DEG tables; min_cooccurrence filters weak edges\n"
+            "gene co-occurrence network across DEG tables; min_cooccurrence filters weak edges; "
+            "if result contains a 'warning' field the network is trivial (< 3 comparisons) \u2014 skip interpretation and note the warning\n"
             "- deg_direction_comparison: {comparisonA_groupA, comparisonA_groupB, comparisonB_groupA, comparisonB_groupB} \u2014 "
             "concordant/discordant genes between two comparisons"
         )
