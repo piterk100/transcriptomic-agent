@@ -11,14 +11,30 @@ This is a full-stack application with two independent servers that must both run
 
 ### Backend structure (`backend/`)
 
-- `main.py` — FastAPI app. Endpoints: `POST /api/datasets` (file upload), `PATCH /api/datasets/{id}/group_col`, `DELETE /api/datasets/{id}`, `POST /api/run` (streaming SSE agent loop), `POST /api/group_mappings`, `GET /api/group_mappings`. Datasets stored in-memory (`_datasets` dict). Group name mappings stored in `group_mappings` dict. `RunRequest` accepts `free_steps` (int) and `mode` (`"reproduce"` | `"explore"`); mode controls temperature (0.0 / 1.0). Calls `load_dotenv()` at startup. Group column autodetection uses keyword scoring (name keywords + value keywords + fewer-unique-values preference). GEO prefix cleaning strips `"key: value"` prefixes from group values.
-- `agent/runner.py` — Core async generator `run_agent_loop(datasets, max_steps, api_key, temperature, mappings)`. Guards: (1) blocks DONE when any hypothesis is still PENDING (except on the last step), (2) blocks duplicate tool calls with identical params in consecutive steps, (3) blocks tools in `_ONCE_ONLY` set (`cross_dataset_de`) after first call. Appends GROUP MAPPINGS block to system prompt when mappings are defined. Writes a Markdown report to `reports/` on completion or budget exhaustion.
+- `main.py` — FastAPI app. Endpoints: `POST /api/datasets` (file upload), `PATCH /api/datasets/{id}/group_col`, `DELETE /api/datasets/{id}`, `POST /api/run` (streaming SSE agent loop), `POST /api/group_mappings`, `GET /api/group_mappings`, `POST /api/datasets/upload_deg`, `GET /api/datasets/deg`. Datasets stored in-memory (`_datasets` dict). Pre-computed DEG tables stored in `deg_store` dict. Group name mappings stored in `group_mappings` dict. `RunRequest` accepts `free_steps` (int) and `mode` (`"reproduce"` | `"explore"`); mode controls temperature (0.0 / 1.0). Calls `load_dotenv()` at startup. Group column autodetection uses keyword scoring (name keywords + value keywords + fewer-unique-values preference). GEO prefix cleaning strips `"key: value"` prefixes from group values.
+- `agent/runner.py` — Core async generator `run_agent_loop(datasets, max_steps, api_key, temperature, mappings, deg_datasets)`. Guards: (1) blocks DONE when any hypothesis is still PENDING (except on the last step), (2) blocks duplicate tool calls with identical params in consecutive steps, (3) blocks tools in `_ONCE_ONLY` set (`cross_dataset_de`) after first call, (4) in DEG-only mode blocks all tools not in `_DEG_ONLY_ALLOWED`. Appends GROUP MAPPINGS block to system prompt when mappings are defined. Writes a Markdown report to `reports/` on completion or budget exhaustion.
 - `agent/seeder.py` — Pre-analysis that runs before the loop: for each dataset and every pairwise group combination, runs genome-wide MWU + BH correction to find DE genes. Also runs cross-dataset DE for group pairs present in ≥2 datasets. Returns seed hypotheses (S1, S2, ...) and a `seed_data` dict used in the report.
-- `agent/system_prompt.py` — Builds the system prompt injected into every Claude call, including dataset descriptions, seed summary, tool documentation, and statistical/efficiency rules (no circular reasoning, no double-log, verdict criteria, no duplicate tool calls, cross_dataset_de once-only, subgroup homogeneity interpretation).
-- `tools/single.py` — Single-dataset tools: `differential_expression` (MWU per gene + BH correction, consistent with seeder), `pathway_enrichment` (hypergeometric + BH against local GMT file; requires `GMT_FILE` env var), `subgroup_discovery` (PCA + KMeans; min subgroup size = max(3, 15% of samples)), `gene_network_hub` (permutation-based co-expression), and others.
-- `tools/cross.py` — Cross-dataset tools: `cross_dataset_de` (Fisher's method for meta-DE), `invariant_axis` (Cohen's d stability), `cross_dataset_correlation`, `cross_dataset_rewiring`. All group-based tools accept `mappings` param and use `resolve_group()` to map aliases to canonical names.
-- `tools/registry.py` — `TOOLS` dict mapping tool names to functions; `summarize_result()` for log display.
-- `tools/sandbox.py` — `execute_sandbox()` runs arbitrary Python code written by the agent using `exec()` with `datasets`, `np`, `pd`, `stats` in scope.
+- `agent/system_prompt.py` — Builds the system prompt injected into every Claude call, including dataset descriptions, DEG dataset descriptions, seed summary, tool documentation, and rules: no circular reasoning, no double-log, verdict criteria, no duplicate tool calls, cross_dataset_de once-only, subgroup homogeneity interpretation, EXECUTE_CODE RULES (forbidden uses + self-check question), immediate hypothesis evaluation after pathway_enrichment/execute_code.
+- `tools/single.py` — Single-dataset tools: `differential_expression` (MWU per gene + BH correction, consistent with seeder), `pathway_enrichment` (hypergeometric + BH against local GMT file; accepts `deg_dataset_name` to auto-extract significant genes from a DEG dataset; requires `GMT_FILE` env var), `subgroup_discovery` (PCA + KMeans; min subgroup size = max(3, 15% of samples); includes multi-seed and subsample silhouette stability), `gene_network_hub` (permutation-based co-expression), and others.
+- `tools/cross.py` — Cross-dataset tools: `cross_dataset_de` (Fisher's method for meta-DE; integrates uploaded DEG tables automatically), `invariant_axis` (Cohen's d stability; warns when n < 10), `cross_dataset_correlation`, `cross_dataset_rewiring`. All group-based tools accept `mappings` param and use `resolve_group()` to map aliases to canonical names.
+- `tools/deg.py` — DEG table analysis tools: `deg_voting` (per-gene vote count + direction consistency across DEG tables), `deg_biomarker_ranking` (composite score = freq × consistency × mean_abs_logFC × mean(−log10 adj_p)), `deg_cooccurrence_network` (weighted gene co-occurrence graph; warns if < 3 comparisons), `deg_direction_comparison` (concordant/discordant/specific genes between two named comparisons).
+- `tools/registry.py` — `TOOLS` dict mapping tool names to functions; `DEG_TOOL_NAMES` set; `summarize_result()` for log display.
+- `tools/sandbox.py` — `execute_sandbox(code, datasets, deg_datasets)` runs arbitrary Python code written by the agent using `exec()` with `datasets`, `deg_datasets`, `np`, `pd`, `stats` in scope.
+
+### DEG-only mode
+
+When only pre-computed DEG tables are loaded (no raw expression datasets), the agent operates in DEG-only mode:
+- System prompt shows a warning banner and lists only available tools
+- Runner hard-blocks any tool not in `_DEG_ONLY_ALLOWED`: `{cross_dataset_de, pathway_enrichment, execute_code, DONE} | DEG_TOOL_NAMES`
+- DEG datasets are named automatically: `DEG 1`, `DEG 2`, ... (frontend assigns names sequentially)
+
+### DEG table upload
+
+`POST /api/datasets/upload_deg` accepts a CSV with auto-detected columns (case-insensitive, handles `.` and space separators):
+- Gene: `gene`, `symbol`, `gene_symbol`, `gene_name` (skipped if `symbol` present), `id`, `geneid`; unnamed first column treated as gene index (limma format)
+- logFC: `logfc`, `log2fc`, `log2foldchange`, `logfoldchange`, `lfc`, `log2_fold_change`
+- adj_p (detected before p to avoid `padj` matching p bucket): `adj_p_val`, `adj_p`, `padj`, `adj_pval`, `fdr`, `q_value`, `qvalue`, `p_adj`
+- p: `p_value`, `pvalue`, `pval`, `p`
 
 ### Agent loop protocol
 
@@ -39,8 +55,8 @@ The backend streams SSE events of type: `mode`, `seed`, `thinking`, `thought`, `
 
 ### Frontend structure (`src/`)
 
-- `App.jsx` — Single-component app. Manages dataset slots, loaded dataset metadata, group column selection, group mappings, mode (REPRODUCE/EXPLORE), step count, and the SSE stream reader. Three-panel layout: datasets panel (left), agent log (center), hypotheses panel (right). Left panel order: DATASETS → GROUP COLUMNS → GROUP MAPPINGS → MODE → STEPS → START AGENT.
-- `api.js` — `setGroupMappings(mappings)` — POSTs canonical group name mappings to `/api/group_mappings`.
+- `App.jsx` — Single-component app. Manages dataset slots, loaded dataset metadata, DEG dataset list, group column selection, group mappings, mode (REPRODUCE/EXPLORE), step count, and the SSE stream reader. Three-panel layout: datasets panel (left), agent log (center), hypotheses panel (right). Left panel order: DATASETS → DEG TABLES → GROUP COLUMNS → GROUP MAPPINGS → MODE → STEPS → START AGENT. Agent controls shown when at least one raw dataset or DEG dataset is loaded.
+- `api.js` — `setGroupMappings(mappings)`, `uploadDegDataset(file, name, groupA, groupB)`.
 - `components/DatasetSlot.jsx` — File upload UI for expression matrix + metadata CSV pair.
 - `components/LogEntry.jsx` — Renders individual SSE events in the log, including mode banner, seed pre-analysis block, hypothesis cards, and result expandable rows.
 
@@ -91,6 +107,6 @@ Set `ANTHROPIC_API_KEY` and optionally `GMT_FILE` in `backend/.env`.
 
 ## Adding a new tool
 
-1. Implement the function in `backend/tools/single.py` or `backend/tools/cross.py`. Signature: `fn(datasets: list, **params) -> dict`. Return a dict with an `interpretation` string field.
-2. Register it in `backend/tools/registry.py`: add to `TOOLS` dict and add a summary lambda in `summarize_result()`.
+1. Implement the function in `backend/tools/single.py`, `backend/tools/cross.py`, or `backend/tools/deg.py`. Signature: `fn(datasets: list, **params) -> dict`. Return a dict with an `interpretation` string field.
+2. Register it in `backend/tools/registry.py`: add to `TOOLS` dict, add to `DEG_TOOL_NAMES` if it operates on DEG tables only, and add a summary lambda in `summarize_result()`.
 3. Document it in `backend/agent/system_prompt.py` under the appropriate section.
