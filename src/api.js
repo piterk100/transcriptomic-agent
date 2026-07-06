@@ -7,6 +7,13 @@ export async function setGroupMappings(mappings) {
   return response.json();
 }
 
+export async function deleteDegDataset(name) {
+  const response = await fetch(`/api/datasets/deg/${encodeURIComponent(name)}`, {
+    method: "DELETE",
+  });
+  return response.json();
+}
+
 export async function uploadDegDataset(file, name, groupA, groupB) {
   const formData = new FormData();
   formData.append("file", file);

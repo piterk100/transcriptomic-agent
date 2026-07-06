@@ -167,7 +167,6 @@ async def upload_dataset(
             }
             for c in meta.columns
             if 2 <= meta[c].nunique() <= 20
-            and meta[c].dtype == object
         ],
         "groups": meta[gc].unique().tolist(),
         "group_counts": {str(k): int(v) for k, v in meta[gc].value_counts().items()},
@@ -286,6 +285,13 @@ async def upload_deg(
             for c in deg_store[name]["comparisons"]
         ],
     }
+
+
+@app.delete("/api/datasets/deg/{name}")
+async def delete_deg_dataset(name: str):
+    """Remove a pre-computed DEG table so it no longer participates in runs."""
+    existed = deg_store.pop(name, None) is not None
+    return {"ok": True, "removed": existed}
 
 
 @app.get("/api/datasets/deg")

@@ -5,7 +5,7 @@ import LogEntry from "./components/LogEntry";
 import HypothesesPanel from "./components/HypothesesPanel";
 import CoverageDock from "./components/CoverageDock";
 import ReportDrawer from "./components/ReportDrawer";
-import { setGroupMappings, uploadDegDataset } from "./api";
+import { setGroupMappings, uploadDegDataset, deleteDegDataset } from "./api";
 import { THEMES, FONT_SANS, RADII, SHADOW, cssVars, ACCENTS, applyAccent } from "./theme";
 
 function makeStyles(t) {
@@ -221,9 +221,21 @@ export default function App() {
     setMappingsOpen(newLoaded.length >= 2);
   };
 
+  const removeDeg = (name) => {
+    setDegDatasets(prev => prev.filter(x => x.name !== name));
+    deleteDegDataset(name).catch(() => {});
+  };
+
   const uploadDeg = async () => {
     if (!degFile || !degGroupA.trim() || !degGroupB.trim()) return;
-    const degName = `DEG ${degDatasets.length + 1}`;
+    // Pick the lowest unused index so removing then re-adding a table can't
+    // collide with an existing name and silently overwrite it server-side.
+    const used = new Set(
+      degDatasets.map(d => parseInt((d.name.match(/\d+/) || [])[0], 10)).filter(Number.isFinite)
+    );
+    let n = 1;
+    while (used.has(n)) n++;
+    const degName = `DEG ${n}`;
     setDegUploading(true);
     setDegStatus("");
     try {
@@ -252,7 +264,7 @@ export default function App() {
     let currentStep = 0;
 
     try {
-      const res = await fetch("http://localhost:8000/api/run", {
+      const res = await fetch("/api/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ dataset_ids: loaded.map(d => d.id), group_cols: groupMap, max_hypotheses: maxHypotheses, mode: agentMode, model: piModel }),
@@ -450,7 +462,7 @@ export default function App() {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                   <span style={{ fontSize: 13, color: t.accent, fontWeight: 600 }}>{d.name}</span>
                   <button className="btn bsm bdng" style={{ padding: "2px 8px", fontSize: 11 }}
-                    onClick={() => setDegDatasets(prev => prev.filter(x => x.name !== d.name))}>✕</button>
+                    onClick={() => removeDeg(d.name)}>✕</button>
                 </div>
                 {(d.comparisons || []).map((c, i) => (
                   <div key={i} style={{ fontSize: 12, color: t.textSecondary, lineHeight: 1.8, fontFamily: "'IBM Plex Mono',ui-monospace,monospace" }}>
